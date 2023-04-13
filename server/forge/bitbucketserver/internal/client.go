@@ -122,6 +122,7 @@ func (c *Client) FindRepo(owner, name string) (*Repo, error) {
 	repo := Repo{}
 	err = json.Unmarshal(contents, &repo)
 	if err != nil {
+		log.Err(err).Str("body", string(contents)).Msg("unable to parse response body")
 		return nil, err
 	}
 	return &repo, nil
