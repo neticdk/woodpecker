@@ -311,7 +311,7 @@ func (c *Client) paginatedRepos(start int) ([]*Repo, error) {
 	var repoResponse Repos
 	err = json.NewDecoder(response.Body).Decode(&repoResponse)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error parsing response from %s: %w", requestURL, err)
 	}
 	if !repoResponse.IsLastPage {
 		reposList, err := c.paginatedRepos(start + limit)
