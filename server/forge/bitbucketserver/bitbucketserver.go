@@ -159,7 +159,7 @@ func (c *Config) Repo(ctx context.Context, u *model.User, _ model.ForgeRemoteID,
 	if err != nil {
 		return nil, err
 	}
-	perm, err := client.FindRepoPerms(repo.Project.Key, repo.Name)
+	perm, err := client.FindRepoPerms(repo.Project.Key, repo.Slug)
 	if err != nil {
 		return nil, err
 	}
@@ -174,7 +174,7 @@ func (c *Config) Repos(ctx context.Context, u *model.User) ([]*model.Repo, error
 	}
 	var all []*model.Repo
 	for _, repo := range repos {
-		perm, err := client.FindRepoPerms(repo.Project.Key, repo.Name)
+		perm, err := client.FindRepoPerms(repo.Project.Key, repo.Slug)
 		if err != nil {
 			return nil, err
 		}
