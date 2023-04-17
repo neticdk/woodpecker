@@ -250,6 +250,14 @@ func (c *Compiler) Compile(conf *yaml.Config) (*backend.Config, error) {
 
 		name := fmt.Sprintf("%s_step_%d", c.prefix, i)
 		step := c.createProcess(name, container, namePipeline)
+
+		// Add netrc if trusted step
+		if !c.netrcOnlyTrusted || c.trustedPipeline || (container.IsPlugin() && container.IsTrustedCloneImage()) {
+			for k, v := range c.cloneEnv {
+				step.Environment[k] = v
+			}
+		}
+
 		stage.Steps = append(stage.Steps, step)
 	}
 
