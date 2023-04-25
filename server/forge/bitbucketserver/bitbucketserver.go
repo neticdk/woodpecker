@@ -42,6 +42,8 @@ const (
 	requestTokenURL   = "%s/plugins/servlet/oauth/request-token"
 	authorizeTokenURL = "%s/plugins/servlet/oauth/authorize"
 	accessTokenURL    = "%s/plugins/servlet/oauth/access-token"
+
+	secret = "045dfb11b042c3c44d68274fd22338e0" // TODO: Temporary
 )
 
 // Opts defines configuration options.
@@ -280,9 +282,9 @@ func (c *Config) Activate(ctx context.Context, u *model.User, r *model.Repo, lin
 		URL:    link,
 		Events: []bb.EventKey{bb.EventKeyRepoRefsChanged, bb.EventKeyPullRequestFrom},
 		Active: true,
-		// Config: &bb.WebhookConfiguration{
-		// 	Secret: "???",
-		// },
+		Config: &bb.WebhookConfiguration{
+			Secret: secret,
+		},
 	}
 	_, _, err = bc.Projects.CreateWebhook(ctx, r.Owner, r.Name, webhook)
 	return err
@@ -379,7 +381,7 @@ func (c *Config) Deactivate(ctx context.Context, u *model.User, r *model.Repo, l
 }
 
 func (c *Config) Hook(_ context.Context, r *http.Request) (*model.Repo, *model.Pipeline, error) {
-	ev, err := bb.ParsePayload(r, nil /* key */)
+	ev, err := bb.ParsePayload(r, []byte(secret))
 	if err != nil {
 		return nil, nil, err
 	}
