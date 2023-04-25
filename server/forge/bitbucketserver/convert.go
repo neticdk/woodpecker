@@ -45,13 +45,14 @@ func convertRepo(from *bb.Repository) *model.Repo {
 		ForgeRemoteID: model.ForgeRemoteID(fmt.Sprintf("%d", from.ID)),
 		Name:          from.Slug,
 		Owner:         from.Project.Key,
-		Branch:        "master",
+		Branch:        "master", // TODO - fetch default branch when not doing listing
 		SCMKind:       model.RepoGit,
 		IsSCMPrivate:  true, // Since we have to use Netrc it has to always be private :/ TODO: Is this really true?
-		FullName:      from.Name,
-		Perm: &model.Perm{
-			Push: true,
-			Pull: true,
+		FullName:      fmt.Sprintf("%s/%s", from.Project.Name, from.Name),
+		Perm: &model.Perm{ // TODO - fetch repo permissions
+			Push:  true,
+			Pull:  true,
+			Admin: true,
 		},
 	}
 
