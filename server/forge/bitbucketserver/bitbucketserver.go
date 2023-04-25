@@ -29,6 +29,7 @@ import (
 	"os"
 
 	"github.com/mrjones/oauth"
+	bb "github.com/neticdk/go-bitbucket/bitbucket"
 
 	"github.com/woodpecker-ci/woodpecker/server/forge"
 	"github.com/woodpecker-ci/woodpecker/server/forge/bitbucketserver/internal"
@@ -154,63 +155,100 @@ func (*Config) TeamPerm(_ *model.User, _ string) (*model.Perm, error) {
 }
 
 func (c *Config) Repo(ctx context.Context, u *model.User, _ model.ForgeRemoteID, owner, name string) (*model.Repo, error) {
-	client := internal.NewClientWithToken(ctx, c.URL, c.Consumer, u.Token)
-	repo, err := client.FindRepo(owner, name)
+	bc, err := c.newClient(u)
 	if err != nil {
 		return nil, err
 	}
-	perm, err := client.FindRepoPerms(repo.Project.Key, repo.Slug)
+
+	r, _, err := bc.Projects.GetRepository(ctx, owner, name)
 	if err != nil {
 		return nil, err
 	}
-	return convertRepo(repo, perm), nil
+
+	// TODO: REPO PERMS??
+
+	return convertRepo(r), nil
 }
 
 func (c *Config) Repos(ctx context.Context, u *model.User) ([]*model.Repo, error) {
-	client := internal.NewClientWithToken(ctx, c.URL, c.Consumer, u.Token)
-	repos, err := client.FindRepos()
+	bc, err := c.newClient(u)
 	if err != nil {
 		return nil, err
 	}
+
+	opts := &bb.RepositorySearchOptions{}
 	var all []*model.Repo
-	for _, repo := range repos {
-		//perm, err := client.FindRepoPerms(repo.Project.Key, repo.Slug)
-		//if err != nil {
-		//	return nil, err
-		//}
-		perm := &model.Perm{
-			Push: true,
-			Pull: true,
+	for {
+		repos, resp, err := bc.Projects.SearchRepositories(ctx, opts)
+		if err != nil {
+			return nil, err
 		}
-		all = append(all, convertRepo(repo, perm))
+		for _, r := range repos {
+			all = append(all, convertRepo(r))
+		}
+		if resp.LastPage {
+			break
+		}
+		opts.Start = resp.NextPageStart
 	}
 
 	return all, nil
 }
 
 func (c *Config) File(ctx context.Context, u *model.User, r *model.Repo, p *model.Pipeline, f string) ([]byte, error) {
-	client := internal.NewClientWithToken(ctx, c.URL, c.Consumer, u.Token)
-
-	return client.FindFileForRepo(r.Owner, r.Name, f, p.Ref)
-}
-
-func (c *Config) Dir(_ context.Context, _ *model.User, _ *model.Repo, _ *model.Pipeline, _ string) ([]*forge_types.FileMeta, error) {
-	return nil, forge_types.ErrNotImplemented
-}
-
-// Status is not supported by the bitbucketserver driver.
-func (c *Config) Status(ctx context.Context, user *model.User, repo *model.Repo, pipeline *model.Pipeline, _ *model.Step) error {
-	status := internal.PipelineStatus{
-		State: convertStatus(pipeline.Status),
-		Desc:  common.GetPipelineStatusDescription(pipeline.Status),
-		Name:  fmt.Sprintf("Woodpecker #%d - %s", pipeline.Number, pipeline.Branch),
-		Key:   "Woodpecker",
-		URL:   common.GetPipelineStatusLink(repo, pipeline, nil),
+	bc, err := c.newClient(u)
+	if err != nil {
+		return nil, err
 	}
 
-	client := internal.NewClientWithToken(ctx, c.URL, c.Consumer, user.Token)
+	b, _, err := bc.Projects.GetTextFileContent(ctx, r.Owner, r.Name, f, p.Ref)
+	if err != nil {
+		return nil, err
+	}
+	return b, nil
+}
 
-	return client.CreateStatus(pipeline.Commit, &status)
+func (c *Config) Dir(ctx context.Context, u *model.User, r *model.Repo, p *model.Pipeline, path string) ([]*forge_types.FileMeta, error) {
+	bc, err := c.newClient(u)
+	if err != nil {
+		return nil, err
+	}
+
+	opts := &bb.FilesListOptions{}
+	var all []*forge_types.FileMeta
+	for {
+		list, resp, err := bc.Projects.ListFiles(ctx, r.Owner, r.Name, path, opts)
+		if err != nil {
+			return nil, err
+		}
+		for _, f := range list {
+			data, err := c.File(ctx, u, r, p, f)
+			if err != nil {
+				return nil, err
+			}
+			all = append(all, &forge_types.FileMeta{Name: f, Data: data})
+		}
+		if resp.LastPage {
+			break
+		}
+		opts.Start = resp.NextPageStart
+	}
+	return all, nil
+}
+
+func (c *Config) Status(ctx context.Context, u *model.User, repo *model.Repo, pipeline *model.Pipeline, step *model.Step) error {
+	bc, err := c.newClient(u)
+	if err != nil {
+		return err
+	}
+	status := &bb.BuildStatus{
+		State:       convertStatus(pipeline.Status),
+		URL:         common.GetPipelineStatusLink(repo, pipeline, step),
+		Key:         common.GetPipelineStatusContext(repo, pipeline, step),
+		Description: common.GetPipelineStatusDescription(pipeline.Status),
+	}
+	_, err = bc.Projects.CreateBuildStatus(ctx, repo.Owner, repo.Name, pipeline.Commit, status)
+	return err
 }
 
 func (c *Config) Netrc(_ *model.User, r *model.Repo) (*model.Netrc, error) {
@@ -227,42 +265,137 @@ func (c *Config) Netrc(_ *model.User, r *model.Repo) (*model.Netrc, error) {
 }
 
 func (c *Config) Activate(ctx context.Context, u *model.User, r *model.Repo, link string) error {
-	client := internal.NewClientWithToken(ctx, c.URL, c.Consumer, u.Token)
+	bc, err := c.newClient(u)
+	if err != nil {
+		return err
+	}
 
-	return client.CreateHook(r.Owner, r.Name, link)
+	err = c.Deactivate(ctx, u, r, link)
+	if err != nil {
+		return err
+	}
+
+	webhook := &bb.Webhook{
+		Name:   "Woodpecker",
+		URL:    link,
+		Events: []bb.EventKey{bb.EventKeyRepoRefsChanged, bb.EventKeyPullRequestFrom},
+		Active: true,
+		// Config: &bb.WebhookConfiguration{
+		// 	Secret: "???",
+		// },
+	}
+	_, _, err = bc.Projects.CreateWebhook(ctx, r.Owner, r.Name, webhook)
+	return err
 }
 
 // Branches returns the names of all branches for the named repository.
 func (c *Config) Branches(ctx context.Context, u *model.User, r *model.Repo) ([]string, error) {
-	bitbucketBranches, err := internal.NewClientWithToken(ctx, c.URL, c.Consumer, u.Token).ListBranches(r.Owner, r.Name)
+	bc, err := c.newClient(u)
 	if err != nil {
 		return nil, err
 	}
 
-	branches := make([]string, 0)
-	for _, branch := range bitbucketBranches {
-		branches = append(branches, branch.Name)
+	opts := &bb.BranchSearchOptions{}
+	var all []string
+	for {
+		branches, resp, err := bc.Projects.SearchBranches(ctx, r.Owner, r.Name, opts)
+		if err != nil {
+			return nil, err
+		}
+		for _, b := range branches {
+			all = append(all, b.DisplayID)
+		}
+		if resp.LastPage {
+			break
+		}
+		opts.Start = resp.NextPageStart
 	}
-	return branches, nil
+
+	return all, nil
 }
 
-// BranchHead returns the sha of the head (latest commit) of the specified branch
-func (c *Config) BranchHead(_ context.Context, _ *model.User, _ *model.Repo, _ string) (string, error) {
-	// TODO(1138): missing implementation
-	return "", forge_types.ErrNotImplemented
+func (c *Config) BranchHead(ctx context.Context, u *model.User, r *model.Repo, b string) (string, error) {
+	bc, err := c.newClient(u)
+	if err != nil {
+		return "", err
+	}
+	branches, _, err := bc.Projects.SearchBranches(ctx, r.Owner, r.Name, &bb.BranchSearchOptions{Filter: b})
+	if err != nil {
+		return "", err
+	}
+	if len(branches) == 0 {
+		return "", fmt.Errorf("no matching branches returned")
+	}
+	for _, branch := range branches {
+		if branch.DisplayID == b {
+			return branch.LatestCommit, nil
+		}
+	}
+	return "", fmt.Errorf("no matching branches found")
 }
 
 func (c *Config) PullRequests(_ context.Context, _ *model.User, _ *model.Repo, _ *model.PaginationData) ([]*model.PullRequest, error) {
+	/*
+		bc, err := c.newClient(u)
+		if err != nil {
+			return nil, err
+		}
+	*/
 	return nil, forge_types.ErrNotImplemented
 }
 
 func (c *Config) Deactivate(ctx context.Context, u *model.User, r *model.Repo, link string) error {
-	client := internal.NewClientWithToken(ctx, c.URL, c.Consumer, u.Token)
-	return client.DeleteHook(r.Owner, r.Name, link)
+	bc, err := c.newClient(u)
+	if err != nil {
+		return err
+	}
+
+	opts := &bb.ListOptions{}
+	var ids []uint64
+	for {
+		hooks, resp, err := bc.Projects.ListWebhooks(ctx, r.Owner, r.Name, opts)
+		if err != nil {
+			return err
+		}
+		for _, h := range hooks {
+			if h.URL == link {
+				ids = append(ids, h.ID)
+			}
+		}
+		if resp.LastPage {
+			break
+		}
+		opts.Start = resp.NextPageStart
+	}
+
+	for _, id := range ids {
+		_, err = bc.Projects.DeleteWebhook(ctx, r.Owner, r.Name, id)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (c *Config) Hook(_ context.Context, r *http.Request) (*model.Repo, *model.Pipeline, error) {
-	return parseHook(r, c.URL)
+	ev, err := bb.ParsePayload(r, nil /* key */)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	switch e := ev.(type) {
+	case bb.RepositoryPushEvent:
+		repo := convertRepo(&e.Repository)
+		pipe := convertRepositoryPushEvent(e, c.URL)
+		return repo, pipe, nil
+	case bb.PullRequestEvent:
+		repo := convertRepo(&e.PullRequest.Source.Repository)
+		pipe := convertPullRequestEvent(e, c.URL)
+		return repo, pipe, nil
+	}
+
+	return nil, nil, fmt.Errorf("unable to handle event")
 }
 
 // OrgMembership returns if user is member of organization and if user
@@ -270,6 +403,17 @@ func (c *Config) Hook(_ context.Context, r *http.Request) (*model.Repo, *model.P
 func (c *Config) OrgMembership(_ context.Context, _ *model.User, _ string) (*model.OrgPerm, error) {
 	// TODO: Not implemented currently
 	return nil, nil
+}
+
+func (c *Config) newClient(u *model.User) (*bb.Client, error) {
+	token := &oauth.AccessToken{
+		Token: u.Token,
+	}
+	cl, err := c.Consumer.MakeHttpClient(token)
+	if err != nil {
+		return nil, err
+	}
+	return bb.NewClient(c.URL, cl)
 }
 
 func CreateConsumer(URL, ConsumerKey string, PrivateKey *rsa.PrivateKey) *oauth.Consumer {

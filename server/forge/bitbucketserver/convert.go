@@ -19,70 +19,96 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"fmt"
-	"net/url"
 	"strings"
 	"time"
 
 	"github.com/mrjones/oauth"
+	bb "github.com/neticdk/go-bitbucket/bitbucket"
 
 	"github.com/woodpecker-ci/woodpecker/server/forge/bitbucketserver/internal"
 	"github.com/woodpecker-ci/woodpecker/server/model"
 )
 
-const (
-	statusPending = "INPROGRESS"
-	statusSuccess = "SUCCESSFUL"
-	statusFailure = "FAILED"
-)
-
-// convertStatus is a helper function used to convert a Woodpecker status to a
-// Bitbucket commit status.
-func convertStatus(status model.StatusValue) string {
+func convertStatus(status model.StatusValue) bb.BuildStatusState {
 	switch status {
 	case model.StatusPending, model.StatusRunning:
-		return statusPending
+		return bb.BuildStatusStateInProgress
 	case model.StatusSuccess:
-		return statusSuccess
+		return bb.BuildStatusStateSuccessful
 	default:
-		return statusFailure
+		return bb.BuildStatusStateFailed
 	}
 }
 
-// convertRepo is a helper function used to convert a Bitbucket server repository
-// structure to the common Woodpecker repository structure.
-func convertRepo(from *internal.Repo, perm *model.Perm) *model.Repo {
-	repo := model.Repo{
-		ForgeRemoteID: model.ForgeRemoteID(fmt.Sprint(from.ID)),
+func convertRepo(from *bb.Repository) *model.Repo {
+	r := &model.Repo{
+		ForgeRemoteID: model.ForgeRemoteID(fmt.Sprintf("%d", from.ID)),
 		Name:          from.Slug,
 		Owner:         from.Project.Key,
 		Branch:        "master",
 		SCMKind:       model.RepoGit,
-		IsSCMPrivate:  true, // Since we have to use Netrc it has to always be private :/
-		FullName:      fmt.Sprintf("%s/%s", from.Project.Key, from.Slug),
-		Perm:          perm,
+		IsSCMPrivate:  true, // Since we have to use Netrc it has to always be private :/ TODO: Is this really true?
+		FullName:      from.Name,
+		Perm: &model.Perm{
+			Push: true,
+			Pull: true,
+		},
 	}
 
-	for _, item := range from.Links.Clone {
-		if item.Name == "http" {
-			uri, err := url.Parse(item.Href)
-			if err != nil {
-				return nil
-			}
-			uri.User = nil
-			repo.Clone = uri.String()
+	for _, l := range from.Links["clone"] {
+		if l.Name == "http" {
+			r.Clone = l.Href
 		}
 	}
-	for _, item := range from.Links.Self {
-		if item.Href != "" {
-			repo.Link = item.Href
-		}
+
+	if l, ok := from.Links["self"]; ok && len(l) > 0 {
+		r.Link = l[0].Href
 	}
-	return &repo
+
+	return r
 }
 
-// convertPushHook is a helper function used to convert a Bitbucket push
+func convertRepositoryPushEvent(ev bb.RepositoryPushEvent, baseURL string) *model.Pipeline {
+	authorLabel := ev.ToCommit.Author.Name
+	if len(authorLabel) > 40 {
+		authorLabel = authorLabel[0:37] + "..."
+	}
+	pipeline := &model.Pipeline{
+		Commit:    ev.ToCommit.ID,
+		Branch:    ev.Changes[0].Ref.DisplayID,
+		Message:   ev.ToCommit.Message,
+		Avatar:    avatarLink(ev.ToCommit.Author.Email),
+		Author:    authorLabel,
+		Email:     ev.ToCommit.Author.Email,
+		Timestamp: time.Time(ev.Date).UTC().Unix(),
+		Ref:       ev.Changes[0].RefId,
+		Link:      fmt.Sprintf("%s/projects/%s/repos/%s/commits/%s", baseURL, ev.Repository.Project.Key, ev.Repository.Slug, ev.ToCommit.ID),
+	}
+	return pipeline
+}
+
+func convertPullRequestEvent(ev bb.PullRequestEvent, baseURL string) *model.Pipeline {
+	authorLabel := ev.Actor.Name
+	if len(authorLabel) > 40 {
+		authorLabel = authorLabel[0:37] + "..."
+	}
+	pipeline := &model.Pipeline{
+		Commit:    ev.PullRequest.Source.Latest,
+		Branch:    ev.PullRequest.Source.DisplayID,
+		Message:   "PR",
+		Avatar:    avatarLink(ev.Actor.Email),
+		Author:    authorLabel,
+		Email:     ev.Actor.Email,
+		Timestamp: time.Time(ev.Date).UTC().Unix(),
+		Ref:       ev.PullRequest.Source.ID,
+		Link:      fmt.Sprintf("%s/projects/%s/repos/%s/commits/%s", baseURL, ev.PullRequest.Source.Repository.Project.Key, ev.PullRequest.Source.Repository.Slug, ev.PullRequest.Source.Latest),
+	}
+	return pipeline
+}
+
+// convertPushHookLegacy is a helper function used to convert a Bitbucket push
 // hook to the Woodpecker pipeline struct holding commit information.
-func convertPushHook(hook *internal.PostHook, baseURL string) *model.Pipeline {
+func convertPushHookLegacy(hook *internal.PostHook, baseURL string) *model.Pipeline {
 	branch := strings.TrimPrefix(
 		strings.TrimPrefix(
 			hook.RefChanges[0].RefID,

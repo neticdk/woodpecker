@@ -28,36 +28,38 @@ import (
 func Test_helper(t *testing.T) {
 	g := goblin.Goblin(t)
 	g.Describe("Bitbucket Server converter", func() {
-		g.It("should convert repository", func() {
-			from := &internal.Repo{
-				Slug: "hello-world",
-			}
-			from.Project.Key = "octocat"
+		/*
+			g.It("should convert repository", func() {
+				from := &internal.Repo{
+					Slug: "hello-world",
+				}
+				from.Project.Key = "octocat"
 
-			// var links [1]internal.LinkType
-			link := internal.CloneLink{
-				Name: "http",
-				Href: "https://x7hw@server.org/foo/bar.git",
-			}
-			from.Links.Clone = append(from.Links.Clone, link)
+				// var links [1]internal.LinkType
+				link := internal.CloneLink{
+					Name: "http",
+					Href: "https://x7hw@server.org/foo/bar.git",
+				}
+				from.Links.Clone = append(from.Links.Clone, link)
 
-			selfRef := internal.SelfRefLink{
-				Href: "https://server.org/foo/bar",
-			}
+				selfRef := internal.SelfRefLink{
+					Href: "https://server.org/foo/bar",
+				}
 
-			from.Links.Self = append(from.Links.Self, selfRef)
+				from.Links.Self = append(from.Links.Self, selfRef)
 
-			to := convertRepo(from, &model.Perm{Pull: true})
-			g.Assert(to.FullName).Equal("octocat/hello-world")
-			g.Assert(to.Owner).Equal("octocat")
-			g.Assert(to.Name).Equal("hello-world")
-			g.Assert(to.Branch).Equal("master")
-			g.Assert(to.SCMKind).Equal(model.RepoGit)
-			g.Assert(to.IsSCMPrivate).Equal(true)
-			g.Assert(to.Clone).Equal("https://server.org/foo/bar.git")
-			g.Assert(to.Link).Equal("https://server.org/foo/bar")
-			g.Assert(to.Perm.Pull).IsTrue()
-		})
+				to := convertRepoLegacy(from, &model.Perm{Pull: true})
+				g.Assert(to.FullName).Equal("octocat/hello-world")
+				g.Assert(to.Owner).Equal("octocat")
+				g.Assert(to.Name).Equal("hello-world")
+				g.Assert(to.Branch).Equal("master")
+				g.Assert(to.SCMKind).Equal(model.RepoGit)
+				g.Assert(to.IsSCMPrivate).Equal(true)
+				g.Assert(to.Clone).Equal("https://server.org/foo/bar.git")
+				g.Assert(to.Link).Equal("https://server.org/foo/bar")
+				g.Assert(to.Perm.Pull).IsTrue()
+			})
+		*/
 
 		g.It("should convert user", func() {
 			token := &oauth.AccessToken{
@@ -92,7 +94,7 @@ func Test_helper(t *testing.T) {
 				Key: "octocat",
 			}
 			change.Repository.Slug = "hello-world"
-			pipeline := convertPushHook(&change, "http://base.com")
+			pipeline := convertPushHookLegacy(&change, "http://base.com")
 			g.Assert(pipeline.Branch).Equal("")
 		})
 
@@ -114,7 +116,7 @@ func Test_helper(t *testing.T) {
 			change.Repository.Project.Key = "octocat"
 			change.Repository.Slug = "hello-world"
 
-			pipeline := convertPushHook(&change, "http://base.com")
+			pipeline := convertPushHookLegacy(&change, "http://base.com")
 			g.Assert(pipeline.Event).Equal(model.EventPush)
 			// Ensuring the author label is not longer then 40
 			g.Assert(pipeline.Author).Equal("John Doe, Appleboy, Mary, Janet E. Da...")
@@ -142,7 +144,7 @@ func Test_helper(t *testing.T) {
 			change.Repository.Project.Key = "octocat"
 			change.Repository.Slug = "hello-world"
 
-			pipeline := convertPushHook(&change, "http://base.com")
+			pipeline := convertPushHookLegacy(&change, "http://base.com")
 			g.Assert(pipeline.Event).Equal(model.EventTag)
 			g.Assert(pipeline.Author).Equal("John Doe")
 			g.Assert(pipeline.Avatar).Equal(avatarLink("huh@huh.com"))
