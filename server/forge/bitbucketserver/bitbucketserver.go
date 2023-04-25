@@ -415,7 +415,7 @@ func (c *Config) newClient(u *model.User) (*bb.Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	return bb.NewClient(c.URL, cl)
+	return bb.NewClient(fmt.Sprintf("%s/rest", c.URL), cl)
 }
 
 func CreateConsumer(URL, ConsumerKey string, PrivateKey *rsa.PrivateKey) *oauth.Consumer {
