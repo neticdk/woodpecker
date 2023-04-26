@@ -66,17 +66,26 @@ func convertRepo(from *bb.Repository, perm *model.Perm, branch string) *model.Re
 }
 
 func convertRepositoryPushEvent(ev *bb.RepositoryPushEvent, baseURL string) *model.Pipeline {
+	if len(ev.Changes) == 0 {
+		return nil
+	}
+	change := ev.Changes[0]
+	if change.ToHash == "0000000000000000000000000000000000000000" {
+		// No ToHash present - could be "DELETE"
+		return nil
+	}
+
 	authorLabel := ev.ToCommit.Author.Name
 	if len(authorLabel) > 40 {
 		authorLabel = authorLabel[0:37] + "..."
 	}
 	pipeline := &model.Pipeline{
-		Commit:    ev.ToCommit.ID,
-		Branch:    ev.Changes[0].Ref.DisplayID,
+		Commit:    change.ToHash,
+		Branch:    change.Ref.DisplayID,
 		Message:   ev.ToCommit.Message,
-		Avatar:    avatarLink(ev.ToCommit.Author.Email),
+		Avatar:    gravatarURL(ev.Actor.Email),
 		Author:    authorLabel,
-		Email:     ev.ToCommit.Author.Email,
+		Email:     ev.Actor.Email,
 		Timestamp: time.Time(ev.Date).UTC().Unix(),
 		Ref:       ev.Changes[0].RefId,
 		Link:      fmt.Sprintf("%s/projects/%s/repos/%s/commits/%s", baseURL, ev.Repository.Project.Key, ev.Repository.Slug, ev.ToCommit.ID),
