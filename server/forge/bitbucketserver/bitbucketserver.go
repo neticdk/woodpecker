@@ -289,15 +289,9 @@ func (c *Config) Activate(ctx context.Context, u *model.User, r *model.Repo, lin
 		return fmt.Errorf("unable to deactive old webhooks: %w", err)
 	}
 
-	lu, err := url.Parse(link)
-	if err != nil {
-		return fmt.Errorf("unable to parse webhook link [%s]: %w", link, err)
-	}
-	lu.RawQuery = "" // Remove the access token part here - we use the secret seed to validate integrity
-
 	webhook := &bb.Webhook{
 		Name:   "Woodpecker",
-		URL:    lu.String(),
+		URL:    link,
 		Events: []bb.EventKey{bb.EventKeyRepoRefsChanged, bb.EventKeyPullRequestFrom},
 		Active: true,
 		Config: &bb.WebhookConfiguration{
