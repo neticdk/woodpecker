@@ -31,6 +31,7 @@ import (
 
 	"github.com/mrjones/oauth"
 	bb "github.com/neticdk/go-bitbucket/bitbucket"
+	"github.com/rs/zerolog/log"
 
 	"github.com/woodpecker-ci/woodpecker/server/forge"
 	"github.com/woodpecker-ci/woodpecker/server/forge/bitbucketserver/internal"
@@ -224,10 +225,11 @@ func (c *Config) File(ctx context.Context, u *model.User, r *model.Repo, p *mode
 		return nil, fmt.Errorf("unable to create bitbucket client: %w", err)
 	}
 
-	b, _, err := bc.Projects.GetTextFileContent(ctx, r.Owner, r.Name, f, p.Ref)
+	b, _, err := bc.Projects.GetTextFileContent(ctx, r.Owner, r.Name, f, p.Commit)
 	if err != nil {
 		return nil, err
 	}
+	log.Trace().Bytes("contents", b).Msgf("read contents of file: %s", f)
 	return b, nil
 }
 
@@ -237,7 +239,7 @@ func (c *Config) Dir(ctx context.Context, u *model.User, r *model.Repo, p *model
 		return nil, fmt.Errorf("unable to create bitbucket client: %w", err)
 	}
 
-	opts := &bb.FilesListOptions{}
+	opts := &bb.FilesListOptions{At: p.Commit}
 	var all []*forge_types.FileMeta
 	for {
 		list, resp, err := bc.Projects.ListFiles(ctx, r.Owner, r.Name, path, opts)
@@ -248,11 +250,14 @@ func (c *Config) Dir(ctx context.Context, u *model.User, r *model.Repo, p *model
 			return nil, err
 		}
 		for _, f := range list {
+			/* Conent is never used from Dir function
 			data, err := c.File(ctx, u, r, p, f)
 			if err != nil {
 				return nil, err
 			}
 			all = append(all, &forge_types.FileMeta{Name: f, Data: data})
+			*/
+			all = append(all, &forge_types.FileMeta{Name: f, Data: nil})
 		}
 		if resp.LastPage {
 			break
