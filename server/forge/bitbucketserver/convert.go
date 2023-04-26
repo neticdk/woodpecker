@@ -90,6 +90,13 @@ func convertRepositoryPushEvent(ev *bb.RepositoryPushEvent, baseURL string) *mod
 		Ref:       ev.Changes[0].RefId,
 		Link:      fmt.Sprintf("%s/projects/%s/repos/%s/commits/%s", baseURL, ev.Repository.Project.Key, ev.Repository.Slug, ev.ToCommit.ID),
 	}
+
+	if strings.HasPrefix(ev.Changes[0].RefId, "refs/tags/") {
+		pipeline.Event = model.EventTag
+	} else {
+		pipeline.Event = model.EventPush
+	}
+
 	return pipeline
 }
 
@@ -108,6 +115,7 @@ func convertPullRequestEvent(ev *bb.PullRequestEvent, baseURL string) *model.Pip
 		Timestamp: time.Time(ev.Date).UTC().Unix(),
 		Ref:       ev.PullRequest.Source.ID,
 		Link:      fmt.Sprintf("%s/projects/%s/repos/%s/commits/%s", baseURL, ev.PullRequest.Source.Repository.Project.Key, ev.PullRequest.Source.Repository.Slug, ev.PullRequest.Source.Latest),
+		Event:     model.EventPush,
 	}
 	return pipeline
 }
