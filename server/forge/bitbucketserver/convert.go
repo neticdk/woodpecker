@@ -88,7 +88,7 @@ func convertRepositoryPushEvent(ev *bb.RepositoryPushEvent, baseURL string) *mod
 		Email:     ev.Actor.Email,
 		Timestamp: time.Time(ev.Date).UTC().Unix(),
 		Ref:       ev.Changes[0].RefId,
-		Link:      fmt.Sprintf("%s/projects/%s/repos/%s/commits/%s", baseURL, ev.Repository.Project.Key, ev.Repository.Slug, ev.ToCommit.ID),
+		Link:      fmt.Sprintf("%s/projects/%s/repos/%s/commits/%s", baseURL, ev.Repository.Project.Key, ev.Repository.Slug, change.ToHash),
 	}
 
 	if strings.HasPrefix(ev.Changes[0].RefId, "refs/tags/") {
