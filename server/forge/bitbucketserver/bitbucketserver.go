@@ -242,6 +242,9 @@ func (c *Config) Dir(ctx context.Context, u *model.User, r *model.Repo, p *model
 	for {
 		list, resp, err := bc.Projects.ListFiles(ctx, r.Owner, r.Name, path, opts)
 		if err != nil {
+			if resp.StatusCode == http.StatusNotFound {
+				break // requested directory might not exist
+			}
 			return nil, err
 		}
 		for _, f := range list {
