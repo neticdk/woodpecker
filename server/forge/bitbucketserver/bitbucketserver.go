@@ -447,9 +447,9 @@ type httpLogger struct {
 }
 
 func (hl *httpLogger) RoundTrip(req *http.Request) (*http.Response, error) {
-	log.Trace().Str("method", req.Method).Any("url", req.URL).Msg("request")
+	log.Trace().Str("method", req.Method).Str("url", req.URL.String()).Msg("request")
 	resp, err := hl.Transport.RoundTrip(req)
-	log.Trace().Str("status", resp.Status).Any("url", req.URL).Msg("response")
+	log.Trace().Str("status", resp.Status).Str("url", req.URL.String()).Msg("response")
 	return resp, err
 }
 
