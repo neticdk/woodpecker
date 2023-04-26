@@ -69,7 +69,7 @@ func convertRepo(from *bb.Repository) *model.Repo {
 	return r
 }
 
-func convertRepositoryPushEvent(ev bb.RepositoryPushEvent, baseURL string) *model.Pipeline {
+func convertRepositoryPushEvent(ev *bb.RepositoryPushEvent, baseURL string) *model.Pipeline {
 	authorLabel := ev.ToCommit.Author.Name
 	if len(authorLabel) > 40 {
 		authorLabel = authorLabel[0:37] + "..."
@@ -88,7 +88,7 @@ func convertRepositoryPushEvent(ev bb.RepositoryPushEvent, baseURL string) *mode
 	return pipeline
 }
 
-func convertPullRequestEvent(ev bb.PullRequestEvent, baseURL string) *model.Pipeline {
+func convertPullRequestEvent(ev *bb.PullRequestEvent, baseURL string) *model.Pipeline {
 	authorLabel := ev.Actor.Name
 	if len(authorLabel) > 40 {
 		authorLabel = authorLabel[0:37] + "..."

@@ -26,6 +26,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 
 	"github.com/mrjones/oauth"
@@ -277,9 +278,15 @@ func (c *Config) Activate(ctx context.Context, u *model.User, r *model.Repo, lin
 		return err
 	}
 
+	lu, err := url.Parse(link)
+	if err != nil {
+		return err
+	}
+	lu.RawQuery = "" // Remove the access token part here - we use the secret seed to validate integrity
+
 	webhook := &bb.Webhook{
 		Name:   "Woodpecker",
-		URL:    link,
+		URL:    lu.String(),
 		Events: []bb.EventKey{bb.EventKeyRepoRefsChanged, bb.EventKeyPullRequestFrom},
 		Active: true,
 		Config: &bb.WebhookConfiguration{
@@ -352,6 +359,11 @@ func (c *Config) Deactivate(ctx context.Context, u *model.User, r *model.Repo, l
 		return err
 	}
 
+	lu, err := url.Parse(link)
+	if err != nil {
+		return err
+	}
+
 	opts := &bb.ListOptions{}
 	var ids []uint64
 	for {
@@ -360,7 +372,8 @@ func (c *Config) Deactivate(ctx context.Context, u *model.User, r *model.Repo, l
 			return err
 		}
 		for _, h := range hooks {
-			if h.URL == link {
+			hu, err := url.Parse(h.URL)
+			if err == nil && hu.Host == lu.Host {
 				ids = append(ids, h.ID)
 			}
 		}
@@ -387,11 +400,11 @@ func (c *Config) Hook(_ context.Context, r *http.Request) (*model.Repo, *model.P
 	}
 
 	switch e := ev.(type) {
-	case bb.RepositoryPushEvent:
+	case *bb.RepositoryPushEvent:
 		repo := convertRepo(&e.Repository)
 		pipe := convertRepositoryPushEvent(e, c.URL)
 		return repo, pipe, nil
-	case bb.PullRequestEvent:
+	case *bb.PullRequestEvent:
 		repo := convertRepo(&e.PullRequest.Source.Repository)
 		pipe := convertPullRequestEvent(e, c.URL)
 		return repo, pipe, nil
