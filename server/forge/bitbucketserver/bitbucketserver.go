@@ -160,34 +160,45 @@ func (*Config) TeamPerm(_ *model.User, _ string) (*model.Perm, error) {
 func (c *Config) Repo(ctx context.Context, u *model.User, _ model.ForgeRemoteID, owner, name string) (*model.Repo, error) {
 	bc, err := c.newClient(u)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to create bitbucket client: %w", err)
 	}
 
 	r, _, err := bc.Projects.GetRepository(ctx, owner, name)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to get repository: %w", err)
 	}
 
-	// TODO: REPO PERMS??
+	b, _, err := bc.Projects.GetDefaultBranch(ctx, owner, name)
+	if err != nil {
+		return nil, fmt.Errorf("unable to fetch default branch: %w", err)
+	}
 
-	return convertRepo(r), nil
+	perms := &model.Perm{Pull: true}
+	_, _, err = bc.Projects.ListWebhooks(ctx, owner, name, &bb.ListOptions{})
+	if err == nil {
+		perms.Push = true
+		perms.Admin = true
+	}
+
+	return convertRepo(r, perms, b.DisplayID), nil
 }
 
 func (c *Config) Repos(ctx context.Context, u *model.User) ([]*model.Repo, error) {
 	bc, err := c.newClient(u)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to create bitbucket client: %w", err)
 	}
 
-	opts := &bb.RepositorySearchOptions{}
+	opts := &bb.RepositorySearchOptions{Permission: bb.PermissionRepoAdmin}
 	var all []*model.Repo
 	for {
 		repos, resp, err := bc.Projects.SearchRepositories(ctx, opts)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("unable to search repositories: %w", err)
 		}
 		for _, r := range repos {
-			all = append(all, convertRepo(r))
+			perms := &model.Perm{Pull: true, Push: true, Admin: true}
+			all = append(all, convertRepo(r, perms, ""))
 		}
 		if resp.LastPage {
 			break
@@ -201,7 +212,7 @@ func (c *Config) Repos(ctx context.Context, u *model.User) ([]*model.Repo, error
 func (c *Config) File(ctx context.Context, u *model.User, r *model.Repo, p *model.Pipeline, f string) ([]byte, error) {
 	bc, err := c.newClient(u)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to create bitbucket client: %w", err)
 	}
 
 	b, _, err := bc.Projects.GetTextFileContent(ctx, r.Owner, r.Name, f, p.Ref)
@@ -214,7 +225,7 @@ func (c *Config) File(ctx context.Context, u *model.User, r *model.Repo, p *mode
 func (c *Config) Dir(ctx context.Context, u *model.User, r *model.Repo, p *model.Pipeline, path string) ([]*forge_types.FileMeta, error) {
 	bc, err := c.newClient(u)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to create bitbucket client: %w", err)
 	}
 
 	opts := &bb.FilesListOptions{}
@@ -242,7 +253,7 @@ func (c *Config) Dir(ctx context.Context, u *model.User, r *model.Repo, p *model
 func (c *Config) Status(ctx context.Context, u *model.User, repo *model.Repo, pipeline *model.Pipeline, step *model.Step) error {
 	bc, err := c.newClient(u)
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to create bitbucket client: %w", err)
 	}
 	status := &bb.BuildStatus{
 		State:       convertStatus(pipeline.Status),
@@ -257,7 +268,7 @@ func (c *Config) Status(ctx context.Context, u *model.User, repo *model.Repo, pi
 func (c *Config) Netrc(_ *model.User, r *model.Repo) (*model.Netrc, error) {
 	host, err := common.ExtractHostFromCloneURL(r.Clone)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to create bitbucket client: %w", err)
 	}
 
 	return &model.Netrc{
@@ -270,17 +281,17 @@ func (c *Config) Netrc(_ *model.User, r *model.Repo) (*model.Netrc, error) {
 func (c *Config) Activate(ctx context.Context, u *model.User, r *model.Repo, link string) error {
 	bc, err := c.newClient(u)
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to create bitbucket client: %w", err)
 	}
 
 	err = c.Deactivate(ctx, u, r, link)
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to deactive old webhooks: %w", err)
 	}
 
 	lu, err := url.Parse(link)
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to parse webhook link [%s]: %w", link, err)
 	}
 	lu.RawQuery = "" // Remove the access token part here - we use the secret seed to validate integrity
 
@@ -301,7 +312,7 @@ func (c *Config) Activate(ctx context.Context, u *model.User, r *model.Repo, lin
 func (c *Config) Branches(ctx context.Context, u *model.User, r *model.Repo) ([]string, error) {
 	bc, err := c.newClient(u)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to create bitbucket client: %w", err)
 	}
 
 	opts := &bb.BranchSearchOptions{}
@@ -326,7 +337,7 @@ func (c *Config) Branches(ctx context.Context, u *model.User, r *model.Repo) ([]
 func (c *Config) BranchHead(ctx context.Context, u *model.User, r *model.Repo, b string) (string, error) {
 	bc, err := c.newClient(u)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("unable to create bitbucket client: %w", err)
 	}
 	branches, _, err := bc.Projects.SearchBranches(ctx, r.Owner, r.Name, &bb.BranchSearchOptions{Filter: b})
 	if err != nil {
@@ -356,7 +367,7 @@ func (c *Config) PullRequests(_ context.Context, _ *model.User, _ *model.Repo, _
 func (c *Config) Deactivate(ctx context.Context, u *model.User, r *model.Repo, link string) error {
 	bc, err := c.newClient(u)
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to create bitbucket client: %w", err)
 	}
 
 	lu, err := url.Parse(link)
@@ -396,16 +407,16 @@ func (c *Config) Deactivate(ctx context.Context, u *model.User, r *model.Repo, l
 func (c *Config) Hook(_ context.Context, r *http.Request) (*model.Repo, *model.Pipeline, error) {
 	ev, err := bb.ParsePayload(r, []byte(secret))
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("unable to parse payload from webhook invocation: %w", err)
 	}
 
 	switch e := ev.(type) {
 	case *bb.RepositoryPushEvent:
-		repo := convertRepo(&e.Repository)
+		repo := convertRepo(&e.Repository, &model.Perm{}, "")
 		pipe := convertRepositoryPushEvent(e, c.URL)
 		return repo, pipe, nil
 	case *bb.PullRequestEvent:
-		repo := convertRepo(&e.PullRequest.Source.Repository)
+		repo := convertRepo(&e.PullRequest.Source.Repository, &model.Perm{}, "")
 		pipe := convertPullRequestEvent(e, c.URL)
 		return repo, pipe, nil
 	}
