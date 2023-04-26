@@ -70,7 +70,7 @@ func Test_helper(t *testing.T) {
 				EmailAddress: "huh@huh.com",
 			}
 
-			result := convertUser(user, token)
+			result := convertUserLegacy(user, token)
 			g.Assert(result.Avatar).Equal(avatarLink("huh@huh.com"))
 			g.Assert(result.Login).Equal("x12f")
 			g.Assert(result.Token).Equal("foo")

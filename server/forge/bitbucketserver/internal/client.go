@@ -69,7 +69,24 @@ func NewClientWithToken(ctx context.Context, url string, consumer *oauth.Consume
 	}
 }
 
-func (c *Client) FindCurrentUser() (*User, error) {
+func (c *Client) FindCurrentUser() (string, error) {
+	resp, err := c.doGet(fmt.Sprintf(currentUserID, c.base))
+	if resp != nil {
+		defer resp.Body.Close()
+	}
+	if err != nil {
+		return "", fmt.Errorf("unable to query logged in user id: %w", err)
+	}
+
+	bits, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("unable to read data from user id query: %w", err)
+	}
+	login := string(bits)
+	return login, nil
+}
+
+func (c *Client) FindCurrentUserLegacy() (*User, error) {
 	CurrentUserIDResponse, err := c.doGet(fmt.Sprintf(currentUserID, c.base))
 	if CurrentUserIDResponse != nil {
 		defer CurrentUserIDResponse.Body.Close()

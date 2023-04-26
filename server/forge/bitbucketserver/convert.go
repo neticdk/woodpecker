@@ -103,6 +103,21 @@ func convertPullRequestEvent(ev *bb.PullRequestEvent, baseURL string) *model.Pip
 	return pipeline
 }
 
+func convertUser(user *bb.User, token string) *model.User {
+	return &model.User{
+		Login:  user.Slug,
+		Token:  token,
+		Email:  user.Email,
+		Avatar: gravatarURL(user.Email),
+	}
+}
+
+func gravatarURL(email string) string {
+	e := strings.ToLower(strings.TrimSpace(email))
+	h := md5.Sum([]byte(e))
+	return fmt.Sprintf("https://www.gravatar.com/avatar/%x", h)
+}
+
 // convertPushHookLegacy is a helper function used to convert a Bitbucket push
 // hook to the Woodpecker pipeline struct holding commit information.
 func convertPushHookLegacy(hook *internal.PostHook, baseURL string) *model.Pipeline {
@@ -142,7 +157,7 @@ func convertPushHookLegacy(hook *internal.PostHook, baseURL string) *model.Pipel
 
 // convertUser is a helper function used to convert a Bitbucket user account
 // structure to the Woodpecker User structure.
-func convertUser(from *internal.User, token *oauth.AccessToken) *model.User {
+func convertUserLegacy(from *internal.User, token *oauth.AccessToken) *model.User {
 	return &model.User{
 		Login:  from.Slug,
 		Token:  token.Token,

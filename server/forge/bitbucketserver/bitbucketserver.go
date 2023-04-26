@@ -132,13 +132,22 @@ func (c *Config) Login(ctx context.Context, res http.ResponseWriter, req *http.R
 	}
 
 	client := internal.NewClientWithToken(ctx, c.URL, c.Consumer, accessToken.Token)
-
-	user, err := client.FindCurrentUser()
+	userID, err := client.FindCurrentUser()
 	if err != nil {
 		return nil, err
 	}
 
-	return convertUser(user, accessToken), nil
+	bc, err := c.newClient(&model.User{Token: accessToken.Token})
+	if err != nil {
+		return nil, fmt.Errorf("unable to create bitbucket client: %w", err)
+	}
+
+	user, _, err := bc.Users.GetUser(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("unable to query for user: %w", err)
+	}
+
+	return convertUser(user, accessToken.Token), nil
 }
 
 // Auth is not supported by the Stash driver.
