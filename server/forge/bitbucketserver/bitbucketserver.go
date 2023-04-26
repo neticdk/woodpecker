@@ -442,14 +442,30 @@ func (c *Config) OrgMembership(_ context.Context, _ *model.User, _ string) (*mod
 	return nil, nil
 }
 
+type httpLogger struct {
+	Transport http.RoundTripper
+}
+
+func (hl *httpLogger) RoundTrip(req *http.Request) (*http.Response, error) {
+	log.Trace().Str("method", req.Method).Any("url", req.URL).Msg("request")
+	resp, err := hl.Transport.RoundTrip(req)
+	log.Trace().Str("status", resp.Status).Any("url", req.URL).Msg("response")
+	return resp, err
+}
+
 func (c *Config) newClient(u *model.User) (*bb.Client, error) {
 	token := &oauth.AccessToken{
 		Token: u.Token,
 	}
-	cl, err := c.Consumer.MakeHttpClient(token)
+	auth, err := c.Consumer.MakeRoundTripper(token)
 	if err != nil {
 		return nil, err
 	}
+	hl := &httpLogger{Transport: auth}
+	cl := &http.Client{
+		Transport: hl,
+	}
+
 	return bb.NewClient(fmt.Sprintf("%s/rest", c.URL), cl)
 }
 
