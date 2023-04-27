@@ -20,6 +20,7 @@ import (
 
 	"github.com/franela/goblin"
 	"github.com/mrjones/oauth"
+	bb "github.com/neticdk/go-bitbucket/bitbucket"
 
 	"github.com/woodpecker-ci/woodpecker/server/forge/bitbucketserver/internal"
 	"github.com/woodpecker-ci/woodpecker/server/model"
@@ -28,6 +29,38 @@ import (
 func Test_helper(t *testing.T) {
 	g := goblin.Goblin(t)
 	g.Describe("Bitbucket Server converter", func() {
+		g.It("should convert status", func() {
+			tests := []struct {
+				from model.StatusValue
+				to   bb.BuildStatusState
+			}{
+				{
+					from: model.StatusPending,
+					to:   bb.BuildStatusStateInProgress,
+				},
+				{
+					from: model.StatusRunning,
+					to:   bb.BuildStatusStateInProgress,
+				},
+				{
+					from: model.StatusSuccess,
+					to:   bb.BuildStatusStateSuccessful,
+				},
+				{
+					from: model.StatusValue("other"),
+					to:   bb.BuildStatusStateFailed,
+				},
+			}
+			for _, tt := range tests {
+				to := convertStatus(tt.from)
+				g.Assert(to).Equal(tt.to)
+			}
+		})
+
+		g.It("should convert repository push event", func() {
+
+		})
+
 		/*
 			g.It("should convert repository", func() {
 				from := &internal.Repo{

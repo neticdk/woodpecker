@@ -369,7 +369,7 @@ func (c *Config) PullRequests(ctx context.Context, u *model.User, r *model.Repo,
 		return nil, fmt.Errorf("unable to create bitbucket client: %w", err)
 	}
 
-	opts := &bb.PullRequestSearchOptions{ListOptions: bb.ListOptions{Limit: uint(p.PerPage), Start: uint(p.Page * p.PerPage)}}
+	opts := &bb.PullRequestSearchOptions{ListOptions: bb.ListOptions{Limit: uint(p.PerPage), Start: uint((p.Page - 1) * p.PerPage)}}
 	prs, _, err := bc.Projects.SearchPullRequests(ctx, r.Owner, r.Name, opts)
 	if err != nil {
 		return nil, fmt.Errorf("unable to list pull-requests: %w", err)
