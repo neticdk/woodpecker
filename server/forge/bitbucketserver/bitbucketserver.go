@@ -480,8 +480,22 @@ func (c *Config) updatePipelineFromCommit(ctx context.Context, r *model.Repo, p 
 	if err != nil {
 		return nil, fmt.Errorf("unable to read commit: %w", err)
 	}
-
 	p.Message = commit.Message
+
+	opts := &bb.ListOptions{}
+	for {
+		changes, resp, err := bc.Projects.ListChanges(ctx, repo.Owner, repo.Name, p.Commit, opts)
+		if err != nil {
+			return nil, fmt.Errorf("unable to list commit changes: %w", err)
+		}
+		for _, ch := range changes {
+			p.ChangedFiles = append(p.ChangedFiles, ch.Path.Title)
+		}
+		if resp.LastPage {
+			break
+		}
+		opts.Start = resp.NextPageStart
+	}
 
 	return p, nil
 }
