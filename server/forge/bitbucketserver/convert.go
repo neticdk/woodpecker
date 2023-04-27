@@ -104,7 +104,7 @@ func convertPullRequestEvent(ev *bb.PullRequestEvent, baseURL string) *model.Pip
 		Timestamp: time.Time(ev.Date).UTC().Unix(),
 		Ref:       ev.PullRequest.Source.ID,
 		Link:      fmt.Sprintf("%s/projects/%s/repos/%s/commits/%s", baseURL, ev.PullRequest.Source.Repository.Project.Key, ev.PullRequest.Source.Repository.Slug, ev.PullRequest.Source.Latest),
-		Event:     model.EventPush,
+		Event:     model.EventPull,
 	}
 	return pipeline
 }
