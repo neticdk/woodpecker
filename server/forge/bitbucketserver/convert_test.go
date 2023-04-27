@@ -166,10 +166,23 @@ func Test_helper(t *testing.T) {
 					},
 				},
 				PullRequest: bb.PullRequest{
+					ID:    123,
+					Title: "my title",
 					Source: bb.PullRequestRef{
 						ID:        "refs/head/branch",
 						DisplayID: "branch",
 						Latest:    "1234567890abcdef",
+						Repository: bb.Repository{
+							Slug: "REPO",
+							Project: &bb.Project{
+								Key: "PRJ",
+							},
+						},
+					},
+					Target: bb.PullRequestRef{
+						ID:        "refs/head/main",
+						DisplayID: "main",
+						Latest:    "abcdef1234567890",
 						Repository: bb.Repository{
 							Slug: "REPO",
 							Project: &bb.Project{
@@ -186,9 +199,10 @@ func Test_helper(t *testing.T) {
 			g.Assert(to.Author).Equal("John Doe")
 			g.Assert(to.Email).Equal("john.doe@mail.com")
 			g.Assert(to.Timestamp).Equal(now.UTC().Unix())
-			g.Assert(to.Ref).Equal("refs/head/branch")
+			g.Assert(to.Ref).Equal("refs/pull-requests/123/from")
 			g.Assert(to.Link).Equal("https://base.url/projects/PRJ/repos/REPO/commits/1234567890abcdef")
-			g.Assert(to.Event).Equal(model.EventPush)
+			g.Assert(to.Event).Equal(model.EventPull)
+			g.Assert(to.Refspec).Equal("branch:main")
 		})
 
 		g.It("should truncate author", func() {

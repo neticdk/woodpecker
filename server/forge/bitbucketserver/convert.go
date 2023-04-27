@@ -97,14 +97,16 @@ func convertPullRequestEvent(ev *bb.PullRequestEvent, baseURL string) *model.Pip
 	pipeline := &model.Pipeline{
 		Commit:    ev.PullRequest.Source.Latest,
 		Branch:    ev.PullRequest.Source.DisplayID,
+		Title:     ev.PullRequest.Title,
 		Message:   "",
 		Avatar:    gravatarURL(ev.Actor.Email),
 		Author:    authorLabel(ev.Actor.Name),
 		Email:     ev.Actor.Email,
 		Timestamp: time.Time(ev.Date).UTC().Unix(),
-		Ref:       ev.PullRequest.Source.ID,
+		Ref:       fmt.Sprintf("refs/pull-requests/%d/from", ev.PullRequest.ID),
 		Link:      fmt.Sprintf("%s/projects/%s/repos/%s/commits/%s", baseURL, ev.PullRequest.Source.Repository.Project.Key, ev.PullRequest.Source.Repository.Slug, ev.PullRequest.Source.Latest),
 		Event:     model.EventPull,
+		Refspec:   fmt.Sprintf("%s:%s", ev.PullRequest.Source.DisplayID, ev.PullRequest.Target.DisplayID),
 	}
 	return pipeline
 }
