@@ -230,7 +230,6 @@ func (c *Config) File(ctx context.Context, u *model.User, r *model.Repo, p *mode
 	if err != nil {
 		return nil, err
 	}
-	log.Trace().Bytes("contents", b).Msgf("read contents of file: %s", f)
 	return b, nil
 }
 
