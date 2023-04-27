@@ -255,7 +255,7 @@ func (c *Config) Dir(ctx context.Context, u *model.User, r *model.Repo, p *model
 			if err != nil {
 				return nil, err
 			}
-			all = append(all, &forge_types.FileMeta{Name: f, Data: data})
+			all = append(all, &forge_types.FileMeta{Name: fmt.Sprintf("%s/%s", path, f), Data: data})
 		}
 		if resp.LastPage {
 			break
