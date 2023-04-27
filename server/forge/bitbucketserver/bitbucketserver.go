@@ -251,14 +251,11 @@ func (c *Config) Dir(ctx context.Context, u *model.User, r *model.Repo, p *model
 			return nil, err
 		}
 		for _, f := range list {
-			/* Conent is never used from Dir function
 			data, err := c.File(ctx, u, r, p, f)
 			if err != nil {
 				return nil, err
 			}
 			all = append(all, &forge_types.FileMeta{Name: f, Data: data})
-			*/
-			all = append(all, &forge_types.FileMeta{Name: f, Data: nil})
 		}
 		if resp.LastPage {
 			break
