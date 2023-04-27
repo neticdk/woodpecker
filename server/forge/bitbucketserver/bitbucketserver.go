@@ -251,11 +251,12 @@ func (c *Config) Dir(ctx context.Context, u *model.User, r *model.Repo, p *model
 			return nil, err
 		}
 		for _, f := range list {
-			data, err := c.File(ctx, u, r, p, f)
+			fullpath := fmt.Sprintf("%s/%s", path, f)
+			data, err := c.File(ctx, u, r, p, fullpath)
 			if err != nil {
 				return nil, err
 			}
-			all = append(all, &forge_types.FileMeta{Name: fmt.Sprintf("%s/%s", path, f), Data: data})
+			all = append(all, &forge_types.FileMeta{Name: fullpath, Data: data})
 		}
 		if resp.LastPage {
 			break
