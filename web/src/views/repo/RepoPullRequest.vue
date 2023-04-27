@@ -33,6 +33,7 @@ const pipelines = computed(() =>
         .replaceAll('refs/pull/', '')
         .replaceAll('refs/merge-requests/', '')
         .replaceAll('refs/pull-requests/', '')
+        .replaceAll('/from', '')
         .replaceAll('/merge', '')
         .replaceAll('/head', '') === pullRequest.value,
   ),
