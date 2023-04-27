@@ -455,6 +455,10 @@ func (c *Config) Hook(ctx context.Context, r *http.Request) (*model.Repo, *model
 }
 
 func (c *Config) updatePipelineFromCommit(ctx context.Context, r *model.Repo, p *model.Pipeline) (*model.Pipeline, error) {
+	if p == nil {
+		return nil, nil
+	}
+
 	_store, ok := store.TryFromContext(ctx)
 	if !ok {
 		log.Error().Msg("could not get store from context")
@@ -465,6 +469,7 @@ func (c *Config) updatePipelineFromCommit(ctx context.Context, r *model.Repo, p 
 	if err != nil {
 		return nil, err
 	}
+	log.Trace().Any("repo", repo).Msg("got repo")
 
 	u, err := _store.GetUser(repo.UserID)
 	if err != nil {
