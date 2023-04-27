@@ -38,6 +38,7 @@ import (
 	"github.com/woodpecker-ci/woodpecker/server/forge/common"
 	forge_types "github.com/woodpecker-ci/woodpecker/server/forge/types"
 	"github.com/woodpecker-ci/woodpecker/server/model"
+	"github.com/woodpecker-ci/woodpecker/server/store"
 )
 
 const (
@@ -365,14 +366,24 @@ func (c *Config) BranchHead(ctx context.Context, u *model.User, r *model.Repo, b
 	return "", fmt.Errorf("no matching branches found")
 }
 
-func (c *Config) PullRequests(_ context.Context, _ *model.User, _ *model.Repo, _ *model.PaginationData) ([]*model.PullRequest, error) {
-	/*
-		bc, err := c.newClient(u)
-		if err != nil {
-			return nil, err
-		}
-	*/
-	return nil, forge_types.ErrNotImplemented
+func (c *Config) PullRequests(ctx context.Context, u *model.User, r *model.Repo, p *model.PaginationData) ([]*model.PullRequest, error) {
+	bc, err := c.newClient(u)
+	if err != nil {
+		return nil, fmt.Errorf("unable to create bitbucket client: %w", err)
+	}
+
+	opts := &bb.PullRequestSearchOptions{ListOptions: bb.ListOptions{Limit: uint(p.PerPage), Start: uint(p.Page * p.PerPage)}}
+	prs, _, err := bc.Projects.SearchPullRequests(ctx, r.Owner, r.Name, opts)
+	if err != nil {
+		return nil, fmt.Errorf("unable to list pull-requests: %w", err)
+	}
+
+	var all []*model.PullRequest
+	for _, pr := range prs {
+		all = append(all, &model.PullRequest{Index: int64(pr.ID), Title: pr.Title})
+	}
+
+	return all, nil
 }
 
 func (c *Config) Deactivate(ctx context.Context, u *model.User, r *model.Repo, link string) error {
@@ -415,7 +426,7 @@ func (c *Config) Deactivate(ctx context.Context, u *model.User, r *model.Repo, l
 	return nil
 }
 
-func (c *Config) Hook(_ context.Context, r *http.Request) (*model.Repo, *model.Pipeline, error) {
+func (c *Config) Hook(ctx context.Context, r *http.Request) (*model.Repo, *model.Pipeline, error) {
 	ev, err := bb.ParsePayload(r, []byte(secret))
 	if err != nil {
 		return nil, nil, fmt.Errorf("unable to parse payload from webhook invocation: %w", err)
@@ -425,14 +436,54 @@ func (c *Config) Hook(_ context.Context, r *http.Request) (*model.Repo, *model.P
 	case *bb.RepositoryPushEvent:
 		repo := convertRepo(&e.Repository, &model.Perm{}, "")
 		pipe := convertRepositoryPushEvent(e, c.URL)
+		pipe, err = c.updatePipelineFromCommit(ctx, repo, pipe)
+		if err != nil {
+			return nil, nil, err
+		}
 		return repo, pipe, nil
 	case *bb.PullRequestEvent:
 		repo := convertRepo(&e.PullRequest.Source.Repository, &model.Perm{}, "")
 		pipe := convertPullRequestEvent(e, c.URL)
+		pipe, err = c.updatePipelineFromCommit(ctx, repo, pipe)
+		if err != nil {
+			return nil, nil, err
+		}
 		return repo, pipe, nil
 	}
 
 	return nil, nil, fmt.Errorf("unable to handle event")
+}
+
+func (c *Config) updatePipelineFromCommit(ctx context.Context, r *model.Repo, p *model.Pipeline) (*model.Pipeline, error) {
+	_store, ok := store.TryFromContext(ctx)
+	if !ok {
+		log.Error().Msg("could not get store from context")
+		return nil, nil
+	}
+
+	repo, err := _store.GetRepoForgeID(r.ForgeRemoteID)
+	if err != nil {
+		return nil, err
+	}
+
+	u, err := _store.GetUser(repo.UserID)
+	if err != nil {
+		return nil, err
+	}
+
+	bc, err := c.newClient(u)
+	if err != nil {
+		return nil, fmt.Errorf("unable to create bitbucket client: %w", err)
+	}
+
+	commit, _, err := bc.Projects.GetCommit(ctx, repo.Owner, repo.Name, p.Commit)
+	if err != nil {
+		return nil, fmt.Errorf("unable to read commit: %w", err)
+	}
+
+	p.Message = commit.Message
+
+	return p, nil
 }
 
 // OrgMembership returns if user is member of organization and if user
