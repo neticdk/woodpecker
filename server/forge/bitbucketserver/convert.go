@@ -75,16 +75,12 @@ func convertRepositoryPushEvent(ev *bb.RepositoryPushEvent, baseURL string) *mod
 		return nil
 	}
 
-	authorLabel := ev.ToCommit.Author.Name
-	if len(authorLabel) > 40 {
-		authorLabel = authorLabel[0:37] + "..."
-	}
 	pipeline := &model.Pipeline{
 		Commit:    change.ToHash,
 		Branch:    change.Ref.DisplayID,
-		Message:   ev.ToCommit.Message,
+		Message:   "",
 		Avatar:    gravatarURL(ev.Actor.Email),
-		Author:    authorLabel,
+		Author:    authorLabel(ev.Actor.Name),
 		Email:     ev.Actor.Email,
 		Timestamp: time.Time(ev.Date).UTC().Unix(),
 		Ref:       ev.Changes[0].RefId,
@@ -101,16 +97,12 @@ func convertRepositoryPushEvent(ev *bb.RepositoryPushEvent, baseURL string) *mod
 }
 
 func convertPullRequestEvent(ev *bb.PullRequestEvent, baseURL string) *model.Pipeline {
-	authorLabel := ev.Actor.Name
-	if len(authorLabel) > 40 {
-		authorLabel = authorLabel[0:37] + "..."
-	}
 	pipeline := &model.Pipeline{
 		Commit:    ev.PullRequest.Source.Latest,
 		Branch:    ev.PullRequest.Source.DisplayID,
-		Message:   "PR",
+		Message:   "",
 		Avatar:    avatarLink(ev.Actor.Email),
-		Author:    authorLabel,
+		Author:    authorLabel(ev.Actor.Name),
 		Email:     ev.Actor.Email,
 		Timestamp: time.Time(ev.Date).UTC().Unix(),
 		Ref:       ev.PullRequest.Source.ID,
@@ -118,6 +110,16 @@ func convertPullRequestEvent(ev *bb.PullRequestEvent, baseURL string) *model.Pip
 		Event:     model.EventPush,
 	}
 	return pipeline
+}
+
+func authorLabel(name string) string {
+	var result string
+	if len(name) > 40 {
+		result = name[0:37] + "..."
+	} else {
+		result = name
+	}
+	return result
 }
 
 func convertUser(user *bb.User, token string) *model.User {
