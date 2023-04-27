@@ -17,12 +17,11 @@ package bitbucketserver
 
 import (
 	"testing"
+	"time"
 
 	"github.com/franela/goblin"
-	"github.com/mrjones/oauth"
 	bb "github.com/neticdk/go-bitbucket/bitbucket"
 
-	"github.com/woodpecker-ci/woodpecker/server/forge/bitbucketserver/internal"
 	"github.com/woodpecker-ci/woodpecker/server/model"
 )
 
@@ -57,135 +56,170 @@ func Test_helper(t *testing.T) {
 			}
 		})
 
-		g.It("should convert repository push event", func() {
-
+		g.It("should convert repository", func() {
+			from := &bb.Repository{
+				ID:   uint64(1234),
+				Slug: "REPO",
+				Project: &bb.Project{
+					Key: "PRJ",
+				},
+				Links: map[string][]bb.Link{
+					"clone": {
+						{
+							Name: "http",
+							Href: "https://git.domain/clone",
+						},
+					},
+					"self": {
+						{
+							Href: "https://git.domain/self",
+						},
+					},
+				},
+			}
+			perm := &model.Perm{}
+			to := convertRepo(from, perm, "main")
+			g.Assert(to.ForgeRemoteID).Equal(model.ForgeRemoteID("1234"))
+			g.Assert(to.Name).Equal("REPO")
+			g.Assert(to.Owner).Equal("PRJ")
+			g.Assert(to.Branch).Equal("main")
+			g.Assert(to.SCMKind).Equal(model.RepoGit)
+			g.Assert(to.FullName).Equal("PRJ/REPO")
+			g.Assert(to.Perm).Equal(perm)
 		})
 
-		/*
-			g.It("should convert repository", func() {
-				from := &internal.Repo{
-					Slug: "hello-world",
-				}
-				from.Project.Key = "octocat"
+		g.It("should convert repository push event", func() {
+			now := time.Now()
+			tests := []struct {
+				from *bb.RepositoryPushEvent
+				to   *model.Pipeline
+			}{
+				{
+					from: &bb.RepositoryPushEvent{},
+					to:   nil,
+				},
+				{
+					from: &bb.RepositoryPushEvent{
+						Changes: []bb.RepositoryPushEventChange{
+							{
+								FromHash: "1234567890abcdef",
+								ToHash:   "0000000000000000000000000000000000000000",
+							},
+						},
+					},
+					to: nil,
+				},
+				{
+					from: &bb.RepositoryPushEvent{
+						Event: bb.Event{
+							Date: bb.ISOTime(now),
+							Actor: bb.User{
+								Name:  "John Doe",
+								Email: "john.doe@mail.com",
+							},
+						},
+						Repository: bb.Repository{
+							Slug: "REPO",
+							Project: &bb.Project{
+								Key: "PRJ",
+							},
+						},
+						Changes: []bb.RepositoryPushEventChange{
+							{
+								Ref: bb.RepositoryPushEventRef{
+									ID:        "refs/head/branch",
+									DisplayID: "branch",
+								},
+								RefId:  "refs/head/branch",
+								ToHash: "1234567890abcdef",
+							},
+						},
+					},
+					to: &model.Pipeline{
+						Commit:    "1234567890abcdef",
+						Branch:    "branch",
+						Message:   "",
+						Avatar:    "https://www.gravatar.com/avatar/fe1dad0128df2f64a8e50ba221fff1d1",
+						Author:    "John Doe",
+						Email:     "john.doe@mail.com",
+						Timestamp: now.UTC().Unix(),
+						Ref:       "refs/head/branch",
+						Link:      "https://base.url/projects/PRJ/repos/REPO/commits/1234567890abcdef",
+						Event:     model.EventPush,
+					},
+				},
+			}
+			for _, tt := range tests {
+				to := convertRepositoryPushEvent(tt.from, "https://base.url")
+				g.Assert(to).Equal(tt.to)
+			}
+		})
 
-				// var links [1]internal.LinkType
-				link := internal.CloneLink{
-					Name: "http",
-					Href: "https://x7hw@server.org/foo/bar.git",
-				}
-				from.Links.Clone = append(from.Links.Clone, link)
+		g.It("should convert pull request event", func() {
+			now := time.Now()
+			from := &bb.PullRequestEvent{
+				Event: bb.Event{
+					Date: bb.ISOTime(now),
+					Actor: bb.User{
+						Name:  "John Doe",
+						Email: "john.doe@mail.com",
+					},
+				},
+				PullRequest: bb.PullRequest{
+					Source: bb.PullRequestRef{
+						ID:        "refs/head/branch",
+						DisplayID: "branch",
+						Latest:    "1234567890abcdef",
+						Repository: bb.Repository{
+							Slug: "REPO",
+							Project: &bb.Project{
+								Key: "PRJ",
+							},
+						},
+					},
+				},
+			}
+			to := convertPullRequestEvent(from, "https://base.url")
+			g.Assert(to.Commit).Equal("1234567890abcdef")
+			g.Assert(to.Branch).Equal("branch")
+			g.Assert(to.Avatar).Equal("https://www.gravatar.com/avatar/fe1dad0128df2f64a8e50ba221fff1d1")
+			g.Assert(to.Author).Equal("John Doe")
+			g.Assert(to.Email).Equal("john.doe@mail.com")
+			g.Assert(to.Timestamp).Equal(now.UTC().Unix())
+			g.Assert(to.Ref).Equal("refs/head/branch")
+			g.Assert(to.Link).Equal("https://base.url/projects/PRJ/repos/REPO/commits/1234567890abcdef")
+			g.Assert(to.Event).Equal(model.EventPush)
+		})
 
-				selfRef := internal.SelfRefLink{
-					Href: "https://server.org/foo/bar",
-				}
-
-				from.Links.Self = append(from.Links.Self, selfRef)
-
-				to := convertRepoLegacy(from, &model.Perm{Pull: true})
-				g.Assert(to.FullName).Equal("octocat/hello-world")
-				g.Assert(to.Owner).Equal("octocat")
-				g.Assert(to.Name).Equal("hello-world")
-				g.Assert(to.Branch).Equal("master")
-				g.Assert(to.SCMKind).Equal(model.RepoGit)
-				g.Assert(to.IsSCMPrivate).Equal(true)
-				g.Assert(to.Clone).Equal("https://server.org/foo/bar.git")
-				g.Assert(to.Link).Equal("https://server.org/foo/bar")
-				g.Assert(to.Perm.Pull).IsTrue()
-			})
-		*/
+		g.It("should truncate author", func() {
+			tests := []struct {
+				from string
+				to   string
+			}{
+				{
+					from: "Some Short Author",
+					to:   "Some Short Author",
+				},
+				{
+					from: "Some Very Long Author That May Include Multiple Names Here",
+					to:   "Some Very Long Author That May Includ...",
+				},
+			}
+			for _, tt := range tests {
+				g.Assert(authorLabel(tt.from)).Equal(tt.to)
+			}
+		})
 
 		g.It("should convert user", func() {
-			token := &oauth.AccessToken{
-				Token: "foo",
+			from := &bb.User{
+				Slug:  "slug",
+				Email: "john.doe@mail.com",
 			}
-			user := &internal.User{
-				Slug:         "x12f",
-				EmailAddress: "huh@huh.com",
-			}
-
-			result := convertUserLegacy(user, token)
-			g.Assert(result.Avatar).Equal(avatarLink("huh@huh.com"))
-			g.Assert(result.Login).Equal("x12f")
-			g.Assert(result.Token).Equal("foo")
-		})
-
-		g.It("branch should be empty", func() {
-			change := internal.PostHook{}
-			change.RefChanges = append(change.RefChanges, internal.RefChange{
-				RefID:  "refs/heads/",
-				ToHash: "73f9c44d",
-			})
-
-			value := internal.Value{}
-			value.ToCommit.Author.Name = "John Doe, Appleboy, Mary, Janet E. Dawson and Ann S. Palmer"
-			value.ToCommit.Author.EmailAddress = "huh@huh.com"
-			value.ToCommit.Message = "message"
-
-			change.Changesets.Values = append(change.Changesets.Values, value)
-
-			change.Repository.Project = internal.Project{
-				Key: "octocat",
-			}
-			change.Repository.Slug = "hello-world"
-			pipeline := convertPushHookLegacy(&change, "http://base.com")
-			g.Assert(pipeline.Branch).Equal("")
-		})
-
-		g.It("should convert push hook to pipeline", func() {
-			change := internal.PostHook{}
-
-			change.RefChanges = append(change.RefChanges, internal.RefChange{
-				RefID:  "refs/heads/release/some-feature",
-				ToHash: "73f9c44d",
-			})
-
-			value := internal.Value{}
-			value.ToCommit.Author.Name = "John Doe, Appleboy, Mary, Janet E. Dawson and Ann S. Palmer"
-			value.ToCommit.Author.EmailAddress = "huh@huh.com"
-			value.ToCommit.Message = "message"
-
-			change.Changesets.Values = append(change.Changesets.Values, value)
-
-			change.Repository.Project.Key = "octocat"
-			change.Repository.Slug = "hello-world"
-
-			pipeline := convertPushHookLegacy(&change, "http://base.com")
-			g.Assert(pipeline.Event).Equal(model.EventPush)
-			// Ensuring the author label is not longer then 40
-			g.Assert(pipeline.Author).Equal("John Doe, Appleboy, Mary, Janet E. Da...")
-			g.Assert(pipeline.Avatar).Equal(avatarLink("huh@huh.com"))
-			g.Assert(pipeline.Commit).Equal("73f9c44d")
-			g.Assert(pipeline.Branch).Equal("release/some-feature")
-			g.Assert(pipeline.Link).Equal("http://base.com/projects/octocat/repos/hello-world/commits/73f9c44d")
-			g.Assert(pipeline.Ref).Equal("refs/heads/release/some-feature")
-			g.Assert(pipeline.Message).Equal("message")
-		})
-
-		g.It("should convert tag hook to pipeline", func() {
-			change := internal.PostHook{}
-			change.RefChanges = append(change.RefChanges, internal.RefChange{
-				RefID:  "refs/tags/v1",
-				ToHash: "73f9c44d",
-			})
-
-			value := internal.Value{}
-			value.ToCommit.Author.Name = "John Doe"
-			value.ToCommit.Author.EmailAddress = "huh@huh.com"
-			value.ToCommit.Message = "message"
-
-			change.Changesets.Values = append(change.Changesets.Values, value)
-			change.Repository.Project.Key = "octocat"
-			change.Repository.Slug = "hello-world"
-
-			pipeline := convertPushHookLegacy(&change, "http://base.com")
-			g.Assert(pipeline.Event).Equal(model.EventTag)
-			g.Assert(pipeline.Author).Equal("John Doe")
-			g.Assert(pipeline.Avatar).Equal(avatarLink("huh@huh.com"))
-			g.Assert(pipeline.Commit).Equal("73f9c44d")
-			g.Assert(pipeline.Branch).Equal("v1")
-			g.Assert(pipeline.Link).Equal("http://base.com/projects/octocat/repos/hello-world/commits/73f9c44d")
-			g.Assert(pipeline.Ref).Equal("refs/tags/v1")
-			g.Assert(pipeline.Message).Equal("message")
+			to := convertUser(from, "token")
+			g.Assert(to.Login).Equal("slug")
+			g.Assert(to.Avatar).Equal("https://www.gravatar.com/avatar/fe1dad0128df2f64a8e50ba221fff1d1")
+			g.Assert(to.Email).Equal("john.doe@mail.com")
+			g.Assert(to.Token).Equal("token")
 		})
 	})
 }

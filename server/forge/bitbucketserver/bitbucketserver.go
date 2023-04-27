@@ -429,26 +429,29 @@ func (c *Config) Hook(ctx context.Context, r *http.Request) (*model.Repo, *model
 		return nil, nil, fmt.Errorf("unable to parse payload from webhook invocation: %w", err)
 	}
 
+	var repo *model.Repo
+	var pipe *model.Pipeline
 	switch e := ev.(type) {
 	case *bb.RepositoryPushEvent:
-		repo := convertRepo(&e.Repository, &model.Perm{}, "")
-		pipe := convertRepositoryPushEvent(e, c.URL)
-		pipe, err = c.updatePipelineFromCommit(ctx, repo, pipe)
-		if err != nil {
-			return nil, nil, err
-		}
-		return repo, pipe, nil
+		repo = convertRepo(&e.Repository, &model.Perm{}, "")
+		pipe = convertRepositoryPushEvent(e, c.URL)
 	case *bb.PullRequestEvent:
-		repo := convertRepo(&e.PullRequest.Source.Repository, &model.Perm{}, "")
-		pipe := convertPullRequestEvent(e, c.URL)
-		pipe, err = c.updatePipelineFromCommit(ctx, repo, pipe)
-		if err != nil {
-			return nil, nil, err
-		}
-		return repo, pipe, nil
+		repo = convertRepo(&e.PullRequest.Source.Repository, &model.Perm{}, "")
+		pipe = convertPullRequestEvent(e, c.URL)
+	default:
+		return nil, nil, nil
 	}
 
-	return nil, nil, fmt.Errorf("unable to handle event")
+	pipe, err = c.updatePipelineFromCommit(ctx, repo, pipe)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if pipe == nil {
+		return nil, nil, nil
+	}
+
+	return repo, pipe, nil
 }
 
 func (c *Config) updatePipelineFromCommit(ctx context.Context, r *model.Repo, p *model.Pipeline) (*model.Pipeline, error) {
