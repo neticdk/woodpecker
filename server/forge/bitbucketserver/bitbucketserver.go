@@ -15,9 +15,6 @@
 
 package bitbucketserver
 
-// WARNING! This is an work-in-progress patch and does not yet conform to the coding,
-// quality or security standards expected of this project. Please use with caution.
-
 import (
 	"context"
 	"crypto/rsa"
@@ -60,8 +57,9 @@ type Opts struct {
 	SkipVerify        bool // Skip ssl verification.
 }
 
-type Config struct {
+type client struct {
 	URL        string
+	URLApi     string
 	Username   string
 	Password   string
 	SkipVerify bool
@@ -71,8 +69,9 @@ type Config struct {
 // New returns a Forge implementation that integrates with Bitbucket Server,
 // the on-premise edition of Bitbucket Cloud, formerly known as Stash.
 func New(opts Opts) (forge.Forge, error) {
-	config := &Config{
+	config := &client{
 		URL:        opts.URL,
+		URLApi:     fmt.Sprintf("%s/rest", opts.URL),
 		Username:   opts.Username,
 		Password:   opts.Password,
 		SkipVerify: opts.SkipVerify,
@@ -113,11 +112,11 @@ func New(opts Opts) (forge.Forge, error) {
 }
 
 // Name returns the string name of this driver
-func (c *Config) Name() string {
+func (c *client) Name() string {
 	return "stash"
 }
 
-func (c *Config) Login(ctx context.Context, res http.ResponseWriter, req *http.Request) (*model.User, error) {
+func (c *client) Login(ctx context.Context, res http.ResponseWriter, req *http.Request) (*model.User, error) {
 	requestToken, u, err := c.Consumer.GetRequestTokenAndUrl("oob")
 	if err != nil {
 		return nil, err
@@ -153,22 +152,11 @@ func (c *Config) Login(ctx context.Context, res http.ResponseWriter, req *http.R
 }
 
 // Auth is not supported by the Stash driver.
-func (*Config) Auth(_ context.Context, _, _ string) (string, error) {
+func (*client) Auth(_ context.Context, _, _ string) (string, error) {
 	return "", fmt.Errorf("Not Implemented")
 }
 
-// Teams is not supported by the Stash driver.
-func (*Config) Teams(_ context.Context, _ *model.User) ([]*model.Team, error) {
-	var teams []*model.Team
-	return teams, nil
-}
-
-// TeamPerm is not supported by the Stash driver.
-func (*Config) TeamPerm(_ *model.User, _ string) (*model.Perm, error) {
-	return nil, nil
-}
-
-func (c *Config) Repo(ctx context.Context, u *model.User, _ model.ForgeRemoteID, owner, name string) (*model.Repo, error) {
+func (c *client) Repo(ctx context.Context, u *model.User, _ model.ForgeRemoteID, owner, name string) (*model.Repo, error) {
 	bc, err := c.newClient(u)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create bitbucket client: %w", err)
@@ -194,13 +182,13 @@ func (c *Config) Repo(ctx context.Context, u *model.User, _ model.ForgeRemoteID,
 	return convertRepo(r, perms, b.DisplayID), nil
 }
 
-func (c *Config) Repos(ctx context.Context, u *model.User) ([]*model.Repo, error) {
+func (c *client) Repos(ctx context.Context, u *model.User) ([]*model.Repo, error) {
 	bc, err := c.newClient(u)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create bitbucket client: %w", err)
 	}
 
-	opts := &bb.RepositorySearchOptions{Permission: bb.PermissionRepoAdmin}
+	opts := &bb.RepositorySearchOptions{Permission: bb.PermissionRepoAdmin, ListOptions: bb.ListOptions{Limit: 250}}
 	var all []*model.Repo
 	for {
 		repos, resp, err := bc.Projects.SearchRepositories(ctx, opts)
@@ -220,7 +208,7 @@ func (c *Config) Repos(ctx context.Context, u *model.User) ([]*model.Repo, error
 	return all, nil
 }
 
-func (c *Config) File(ctx context.Context, u *model.User, r *model.Repo, p *model.Pipeline, f string) ([]byte, error) {
+func (c *client) File(ctx context.Context, u *model.User, r *model.Repo, p *model.Pipeline, f string) ([]byte, error) {
 	bc, err := c.newClient(u)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create bitbucket client: %w", err)
@@ -233,7 +221,7 @@ func (c *Config) File(ctx context.Context, u *model.User, r *model.Repo, p *mode
 	return b, nil
 }
 
-func (c *Config) Dir(ctx context.Context, u *model.User, r *model.Repo, p *model.Pipeline, path string) ([]*forge_types.FileMeta, error) {
+func (c *client) Dir(ctx context.Context, u *model.User, r *model.Repo, p *model.Pipeline, path string) ([]*forge_types.FileMeta, error) {
 	bc, err := c.newClient(u)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create bitbucket client: %w", err)
@@ -265,7 +253,7 @@ func (c *Config) Dir(ctx context.Context, u *model.User, r *model.Repo, p *model
 	return all, nil
 }
 
-func (c *Config) Status(ctx context.Context, u *model.User, repo *model.Repo, pipeline *model.Pipeline, step *model.Step) error {
+func (c *client) Status(ctx context.Context, u *model.User, repo *model.Repo, pipeline *model.Pipeline, step *model.Step) error {
 	bc, err := c.newClient(u)
 	if err != nil {
 		return fmt.Errorf("unable to create bitbucket client: %w", err)
@@ -280,7 +268,7 @@ func (c *Config) Status(ctx context.Context, u *model.User, repo *model.Repo, pi
 	return err
 }
 
-func (c *Config) Netrc(_ *model.User, r *model.Repo) (*model.Netrc, error) {
+func (c *client) Netrc(_ *model.User, r *model.Repo) (*model.Netrc, error) {
 	host, err := common.ExtractHostFromCloneURL(r.Clone)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create bitbucket client: %w", err)
@@ -293,32 +281,8 @@ func (c *Config) Netrc(_ *model.User, r *model.Repo) (*model.Netrc, error) {
 	}, nil
 }
 
-func (c *Config) Activate(ctx context.Context, u *model.User, r *model.Repo, link string) error {
-	bc, err := c.newClient(u)
-	if err != nil {
-		return fmt.Errorf("unable to create bitbucket client: %w", err)
-	}
-
-	err = c.Deactivate(ctx, u, r, link)
-	if err != nil {
-		return fmt.Errorf("unable to deactive old webhooks: %w", err)
-	}
-
-	webhook := &bb.Webhook{
-		Name:   "Woodpecker",
-		URL:    link,
-		Events: []bb.EventKey{bb.EventKeyRepoRefsChanged, bb.EventKeyPullRequestFrom},
-		Active: true,
-		Config: &bb.WebhookConfiguration{
-			Secret: secret,
-		},
-	}
-	_, _, err = bc.Projects.CreateWebhook(ctx, r.Owner, r.Name, webhook)
-	return err
-}
-
 // Branches returns the names of all branches for the named repository.
-func (c *Config) Branches(ctx context.Context, u *model.User, r *model.Repo) ([]string, error) {
+func (c *client) Branches(ctx context.Context, u *model.User, r *model.Repo) ([]string, error) {
 	bc, err := c.newClient(u)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create bitbucket client: %w", err)
@@ -343,7 +307,7 @@ func (c *Config) Branches(ctx context.Context, u *model.User, r *model.Repo) ([]
 	return all, nil
 }
 
-func (c *Config) BranchHead(ctx context.Context, u *model.User, r *model.Repo, b string) (string, error) {
+func (c *client) BranchHead(ctx context.Context, u *model.User, r *model.Repo, b string) (string, error) {
 	bc, err := c.newClient(u)
 	if err != nil {
 		return "", fmt.Errorf("unable to create bitbucket client: %w", err)
@@ -363,7 +327,7 @@ func (c *Config) BranchHead(ctx context.Context, u *model.User, r *model.Repo, b
 	return "", fmt.Errorf("no matching branches found")
 }
 
-func (c *Config) PullRequests(ctx context.Context, u *model.User, r *model.Repo, p *model.PaginationData) ([]*model.PullRequest, error) {
+func (c *client) PullRequests(ctx context.Context, u *model.User, r *model.Repo, p *model.PaginationData) ([]*model.PullRequest, error) {
 	bc, err := c.newClient(u)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create bitbucket client: %w", err)
@@ -383,7 +347,31 @@ func (c *Config) PullRequests(ctx context.Context, u *model.User, r *model.Repo,
 	return all, nil
 }
 
-func (c *Config) Deactivate(ctx context.Context, u *model.User, r *model.Repo, link string) error {
+func (c *client) Activate(ctx context.Context, u *model.User, r *model.Repo, link string) error {
+	bc, err := c.newClient(u)
+	if err != nil {
+		return fmt.Errorf("unable to create bitbucket client: %w", err)
+	}
+
+	err = c.Deactivate(ctx, u, r, link)
+	if err != nil {
+		return fmt.Errorf("unable to deactive old webhooks: %w", err)
+	}
+
+	webhook := &bb.Webhook{
+		Name:   "Woodpecker",
+		URL:    link,
+		Events: []bb.EventKey{bb.EventKeyRepoRefsChanged, bb.EventKeyPullRequestFrom},
+		Active: true,
+		Config: &bb.WebhookConfiguration{
+			Secret: secret,
+		},
+	}
+	_, _, err = bc.Projects.CreateWebhook(ctx, r.Owner, r.Name, webhook)
+	return err
+}
+
+func (c *client) Deactivate(ctx context.Context, u *model.User, r *model.Repo, link string) error {
 	bc, err := c.newClient(u)
 	if err != nil {
 		return fmt.Errorf("unable to create bitbucket client: %w", err)
@@ -423,7 +411,7 @@ func (c *Config) Deactivate(ctx context.Context, u *model.User, r *model.Repo, l
 	return nil
 }
 
-func (c *Config) Hook(ctx context.Context, r *http.Request) (*model.Repo, *model.Pipeline, error) {
+func (c *client) Hook(ctx context.Context, r *http.Request) (*model.Repo, *model.Pipeline, error) {
 	ev, err := bb.ParsePayload(r, []byte(secret))
 	if err != nil {
 		return nil, nil, fmt.Errorf("unable to parse payload from webhook invocation: %w", err)
@@ -454,7 +442,7 @@ func (c *Config) Hook(ctx context.Context, r *http.Request) (*model.Repo, *model
 	return repo, pipe, nil
 }
 
-func (c *Config) updatePipelineFromCommit(ctx context.Context, r *model.Repo, p *model.Pipeline) (*model.Pipeline, error) {
+func (c *client) updatePipelineFromCommit(ctx context.Context, r *model.Repo, p *model.Pipeline) (*model.Pipeline, error) {
 	if p == nil {
 		return nil, nil
 	}
@@ -505,9 +493,20 @@ func (c *Config) updatePipelineFromCommit(ctx context.Context, r *model.Repo, p 
 	return p, nil
 }
 
+// Teams is not supported by the Stash driver.
+func (*client) Teams(_ context.Context, _ *model.User) ([]*model.Team, error) {
+	var teams []*model.Team
+	return teams, nil
+}
+
+// TeamPerm is not supported by the Stash driver.
+func (*client) TeamPerm(_ *model.User, _ string) (*model.Perm, error) {
+	return nil, nil
+}
+
 // OrgMembership returns if user is member of organization and if user
 // is admin/owner in this organization.
-func (c *Config) OrgMembership(_ context.Context, _ *model.User, _ string) (*model.OrgPerm, error) {
+func (c *client) OrgMembership(_ context.Context, _ *model.User, _ string) (*model.OrgPerm, error) {
 	// TODO: Not implemented currently
 	return nil, nil
 }
@@ -517,13 +516,17 @@ type httpLogger struct {
 }
 
 func (hl *httpLogger) RoundTrip(req *http.Request) (*http.Response, error) {
-	log.Trace().Str("method", req.Method).Str("url", req.URL.String()).Msg("request")
 	resp, err := hl.Transport.RoundTrip(req)
-	log.Trace().Str("status", resp.Status).Str("url", req.URL.String()).Msg("response")
+	if resp != nil {
+		log.Trace().Str("method", req.Method).Str("status", resp.Status).Str("url", req.URL.String()).Msg("request completed to bitbucket")
+	}
+	if err != nil {
+		log.Trace().Err(err).Str("method", req.Method).Str("url", req.URL.String()).Msg("unexpected error from bitbucket")
+	}
 	return resp, err
 }
 
-func (c *Config) newClient(u *model.User) (*bb.Client, error) {
+func (c *client) newClient(u *model.User) (*bb.Client, error) {
 	token := &oauth.AccessToken{
 		Token: u.Token,
 	}
@@ -536,7 +539,7 @@ func (c *Config) newClient(u *model.User) (*bb.Client, error) {
 		Transport: hl,
 	}
 
-	return bb.NewClient(fmt.Sprintf("%s/rest", c.URL), cl)
+	return bb.NewClient(c.URLApi, cl)
 }
 
 func CreateConsumer(URL, ConsumerKey string, PrivateKey *rsa.PrivateKey) *oauth.Consumer {
