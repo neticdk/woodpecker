@@ -116,6 +116,7 @@ func Test_helper(t *testing.T) {
 							Actor: bb.User{
 								Name:  "John Doe",
 								Email: "john.doe@mail.com",
+								Slug:  "john.doe_mail.com",
 							},
 						},
 						Repository: bb.Repository{
@@ -139,7 +140,7 @@ func Test_helper(t *testing.T) {
 						Commit:    "1234567890abcdef",
 						Branch:    "branch",
 						Message:   "",
-						Avatar:    "https://www.gravatar.com/avatar/fe1dad0128df2f64a8e50ba221fff1d1",
+						Avatar:    "https://base.url/users/john.doe_mail.com/avatar.png",
 						Author:    "John Doe",
 						Email:     "john.doe@mail.com",
 						Timestamp: now.UTC().Unix(),
@@ -163,6 +164,7 @@ func Test_helper(t *testing.T) {
 					Actor: bb.User{
 						Name:  "John Doe",
 						Email: "john.doe@mail.com",
+						Slug:  "john.doe_mail.com",
 					},
 				},
 				PullRequest: bb.PullRequest{
@@ -195,7 +197,7 @@ func Test_helper(t *testing.T) {
 			to := convertPullRequestEvent(from, "https://base.url")
 			g.Assert(to.Commit).Equal("1234567890abcdef")
 			g.Assert(to.Branch).Equal("branch")
-			g.Assert(to.Avatar).Equal("https://www.gravatar.com/avatar/fe1dad0128df2f64a8e50ba221fff1d1")
+			g.Assert(to.Avatar).Equal("https://base.url/users/john.doe_mail.com/avatar.png")
 			g.Assert(to.Author).Equal("John Doe")
 			g.Assert(to.Email).Equal("john.doe@mail.com")
 			g.Assert(to.Timestamp).Equal(now.UTC().Unix())
@@ -229,9 +231,9 @@ func Test_helper(t *testing.T) {
 				Slug:  "slug",
 				Email: "john.doe@mail.com",
 			}
-			to := convertUser(from, "token")
+			to := convertUser(from, "token", "https://base.url")
 			g.Assert(to.Login).Equal("slug")
-			g.Assert(to.Avatar).Equal("https://www.gravatar.com/avatar/fe1dad0128df2f64a8e50ba221fff1d1")
+			g.Assert(to.Avatar).Equal("https://base.url/users/slug/avatar.png")
 			g.Assert(to.Email).Equal("john.doe@mail.com")
 			g.Assert(to.Token).Equal("token")
 		})

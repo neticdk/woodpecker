@@ -16,7 +16,6 @@
 package bitbucketserver
 
 import (
-	"crypto/md5"
 	"fmt"
 	"strings"
 	"time"
@@ -76,7 +75,7 @@ func convertRepositoryPushEvent(ev *bb.RepositoryPushEvent, baseURL string) *mod
 		Commit:    change.ToHash,
 		Branch:    change.Ref.DisplayID,
 		Message:   "",
-		Avatar:    gravatarURL(ev.Actor.Email),
+		Avatar:    bitbucketAvatarURL(baseURL, ev.Actor.Slug),
 		Author:    authorLabel(ev.Actor.Name),
 		Email:     ev.Actor.Email,
 		Timestamp: time.Time(ev.Date).UTC().Unix(),
@@ -99,7 +98,7 @@ func convertPullRequestEvent(ev *bb.PullRequestEvent, baseURL string) *model.Pip
 		Branch:    ev.PullRequest.Source.DisplayID,
 		Title:     ev.PullRequest.Title,
 		Message:   "",
-		Avatar:    gravatarURL(ev.Actor.Email),
+		Avatar:    bitbucketAvatarURL(baseURL, ev.Actor.Slug),
 		Author:    authorLabel(ev.Actor.Name),
 		Email:     ev.Actor.Email,
 		Timestamp: time.Time(ev.Date).UTC().Unix(),
@@ -121,17 +120,15 @@ func authorLabel(name string) string {
 	return result
 }
 
-func convertUser(user *bb.User, token string) *model.User {
+func convertUser(user *bb.User, token, baseURL string) *model.User {
 	return &model.User{
 		Login:  user.Slug,
 		Token:  token,
 		Email:  user.Email,
-		Avatar: gravatarURL(user.Email),
+		Avatar: bitbucketAvatarURL(baseURL, user.Slug),
 	}
 }
 
-func gravatarURL(email string) string {
-	e := strings.ToLower(strings.TrimSpace(email))
-	h := md5.Sum([]byte(e))
-	return fmt.Sprintf("https://www.gravatar.com/avatar/%x", h)
+func bitbucketAvatarURL(baseURL, slug string) string {
+	return fmt.Sprintf("%s/users/%s/avatar.png", baseURL, slug)
 }

@@ -25,6 +25,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 
 	"github.com/mrjones/oauth"
 	bb "github.com/neticdk/go-bitbucket/bitbucket"
@@ -131,13 +132,13 @@ func (c *client) Login(ctx context.Context, res http.ResponseWriter, req *http.R
 	if err != nil {
 		return nil, err
 	}
-	log.Trace().Any("token", accessToken).Msgf("got access token %+v", accessToken) // TODO: This is for debugging and a severe security issue - must be removed in production code!!!
 
 	client := internal.NewClientWithToken(ctx, c.URL, c.Consumer, accessToken.Token)
 	userID, err := client.FindCurrentUser()
 	if err != nil {
 		return nil, err
 	}
+	userID = strings.ReplaceAll(userID, "@", "_") // Apparently the "whoami" endpoint may return the wrong username
 
 	bc, err := c.newClient(&model.User{Token: accessToken.Token})
 	if err != nil {
@@ -149,7 +150,7 @@ func (c *client) Login(ctx context.Context, res http.ResponseWriter, req *http.R
 		return nil, fmt.Errorf("unable to query for user: %w", err)
 	}
 
-	return convertUser(user, accessToken.Token), nil
+	return convertUser(user, accessToken.Token, c.URL), nil
 }
 
 // Auth is not supported by the Stash driver.
