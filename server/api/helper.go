@@ -30,11 +30,13 @@ import (
 )
 
 func handlePipelineErr(c *gin.Context, err error) {
+	log.Trace().Err(err).Msgf("mapping pipeline error code: %+v", err)
 	if errors.Is(err, &pipeline.ErrNotFound{}) {
 		c.String(http.StatusNotFound, "%s", err)
 	} else if errors.Is(err, &pipeline.ErrBadRequest{}) {
 		c.String(http.StatusBadRequest, "%s", err)
 	} else if errors.Is(err, &pipeline.ErrFiltered{}) {
+		log.Trace().Msg("setting status 'no content'")
 		c.String(http.StatusNoContent, "%s", err)
 	} else {
 		_ = c.AbortWithError(http.StatusInternalServerError, err)
