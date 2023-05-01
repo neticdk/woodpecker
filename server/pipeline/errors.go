@@ -14,6 +14,8 @@
 
 package pipeline
 
+import "errors"
+
 type ErrNotFound struct {
 	Msg string
 }
@@ -30,10 +32,7 @@ func (e ErrBadRequest) Error() string {
 	return e.Msg
 }
 
-type ErrFiltered struct {
-	Msg string
-}
-
-func (e ErrFiltered) Error() string {
-	return "ignoring hook: " + e.Msg
-}
+var (
+	ErrFilteredRestrictions = errors.New("ignoring hook: branch does not match restrictions defined in yaml")
+	ErrFilteredSteps        = errors.New("ignoring hook: step conditions yield zero runnable steps")
+)
