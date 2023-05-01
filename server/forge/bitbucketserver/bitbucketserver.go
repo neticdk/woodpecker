@@ -131,6 +131,7 @@ func (c *client) Login(ctx context.Context, res http.ResponseWriter, req *http.R
 	if err != nil {
 		return nil, err
 	}
+	log.Trace().Any("token", accessToken).Msgf("got access token %+v", accessToken) // TODO: This is for debugging and a severe security issue - must be removed in production code!!!
 
 	client := internal.NewClientWithToken(ctx, c.URL, c.Consumer, accessToken.Token)
 	userID, err := client.FindCurrentUser()
