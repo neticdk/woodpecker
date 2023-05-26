@@ -87,10 +87,10 @@ func Pod(namespace string, step *types.Step, labels, annotations map[string]stri
 			v1.ResourceMemory: *memoryRequest,
 			v1.ResourceCPU:    *CPURequest,
 		},
-		Limits: v1.ResourceList{
-			v1.ResourceMemory: memoryLimit,
-			v1.ResourceCPU:    CPULimit,
-		},
+		// Limits: v1.ResourceList{
+		// 	v1.ResourceMemory: memoryLimit,
+		// 	v1.ResourceCPU:    CPULimit,
+		// },
 	}
 
 	podName, err := dnsName(step.Name)
