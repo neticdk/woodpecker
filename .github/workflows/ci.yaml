@@ -68,7 +68,7 @@ jobs:
           tags: ${{ steps.server-meta.outputs.tags }}
           labels: ${{ steps.server-meta.outputs.labels }}
 
-      - name: Build server
+      - name: Build agent
         run: make release-agent
 
       - name: Extract metadata (tags, labels) for agent
