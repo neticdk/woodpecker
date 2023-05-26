@@ -52,13 +52,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata (tags, labels) for Docker
+      - name: Extract metadata (tags, labels) for server
         id: server-meta
         uses: docker/metadata-action@v4
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-server
 
-      - name: Build and push Docker image
+      - name: Build and push server image
         uses: docker/build-push-action@v3
         with:
           context: .
@@ -68,13 +68,16 @@ jobs:
           tags: ${{ steps.server-meta.outputs.tags }}
           labels: ${{ steps.server-meta.outputs.labels }}
 
-      - name: Extract metadata (tags, labels) for Docker
+      - name: Build server
+        run: make release-agent
+
+      - name: Extract metadata (tags, labels) for agent
         id: agent-meta
         uses: docker/metadata-action@v4
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-agent
 
-      - name: Build and push Docker image
+      - name: Build and push agent image
         uses: docker/build-push-action@v3
         with:
           context: .
