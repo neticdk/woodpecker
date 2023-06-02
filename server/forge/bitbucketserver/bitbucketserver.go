@@ -423,10 +423,10 @@ func (c *client) Hook(ctx context.Context, r *http.Request) (*model.Repo, *model
 	var pipe *model.Pipeline
 	switch e := ev.(type) {
 	case *bb.RepositoryPushEvent:
-		repo = convertRepo(&e.Repository, &model.Perm{}, "")
+		repo = convertRepo(&e.Repository, nil, "")
 		pipe = convertRepositoryPushEvent(e, c.URL)
 	case *bb.PullRequestEvent:
-		repo = convertRepo(&e.PullRequest.Source.Repository, &model.Perm{}, "")
+		repo = convertRepo(&e.PullRequest.Source.Repository, nil, "")
 		pipe = convertPullRequestEvent(e, c.URL)
 	default:
 		return nil, nil, nil
