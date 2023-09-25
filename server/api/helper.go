@@ -37,7 +37,7 @@ func handlePipelineErr(c *gin.Context, err error) {
 	} else if errors.As(err, &badRequest) {
 		c.String(http.StatusBadRequest, "%s", err)
 	} else if errors.Is(err, pipeline.ErrFilteredRestrictions) || errors.Is(err, pipeline.ErrFilteredSteps) {
-		c.Status(http.StatusNoContent)
+		c.String(http.StatusNoContent, "%s", err)
 	} else {
 		_ = c.AbortWithError(http.StatusInternalServerError, err)
 	}
