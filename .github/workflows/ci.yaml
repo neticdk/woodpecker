@@ -44,10 +44,9 @@ jobs:
 
       - name: Build server
         run: |
-          export PATH=$PATH:$(go env GOPATH)/bin
-          echo $PATH
-          go install src.techknowlogick.com/xgo@latest
-          make cross-compile-server
+          make release-server
+          mkdir -p dist/server/linux/amd64
+          mv dist/server/linux_amd64/woodpecker-server dist/server/linux/amd64/woodpecker-server
         env:
           PLATFORMS: linux|amd64
           TAGS: bindata sqlite sqlite_unlock_notify netgo
