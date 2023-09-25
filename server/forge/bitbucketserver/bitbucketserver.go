@@ -59,7 +59,7 @@ type Opts struct {
 }
 
 type client struct {
-	URL        string
+	url        string
 	URLApi     string
 	Username   string
 	Password   string
@@ -71,7 +71,7 @@ type client struct {
 // the on-premise edition of Bitbucket Cloud, formerly known as Stash.
 func New(opts Opts) (forge.Forge, error) {
 	config := &client{
-		URL:        opts.URL,
+		url:        opts.URL,
 		URLApi:     fmt.Sprintf("%s/rest", opts.URL),
 		Username:   opts.Username,
 		Password:   opts.Password,
@@ -117,6 +117,11 @@ func (c *client) Name() string {
 	return "stash"
 }
 
+// URL returns the root url of a configured forge
+func (c *client) URL() string {
+	return c.url
+}
+
 func (c *client) Login(ctx context.Context, res http.ResponseWriter, req *http.Request) (*model.User, error) {
 	requestToken, u, err := c.Consumer.GetRequestTokenAndUrl("oob")
 	if err != nil {
@@ -133,7 +138,7 @@ func (c *client) Login(ctx context.Context, res http.ResponseWriter, req *http.R
 		return nil, err
 	}
 
-	client := internal.NewClientWithToken(ctx, c.URL, c.Consumer, accessToken.Token)
+	client := internal.NewClientWithToken(ctx, c.url, c.Consumer, accessToken.Token)
 	userID, err := client.FindCurrentUser()
 	if err != nil {
 		return nil, err
@@ -150,7 +155,7 @@ func (c *client) Login(ctx context.Context, res http.ResponseWriter, req *http.R
 		return nil, fmt.Errorf("unable to query for user: %w", err)
 	}
 
-	return convertUser(user, accessToken.Token, c.URL), nil
+	return convertUser(user, accessToken.Token, c.url), nil
 }
 
 // Auth is not supported by the Stash driver.
@@ -255,15 +260,15 @@ func (c *client) Dir(ctx context.Context, u *model.User, r *model.Repo, p *model
 	return all, nil
 }
 
-func (c *client) Status(ctx context.Context, u *model.User, repo *model.Repo, pipeline *model.Pipeline, step *model.Step) error {
+func (c *client) Status(ctx context.Context, u *model.User, repo *model.Repo, pipeline *model.Pipeline, workflow *model.Workflow) error {
 	bc, err := c.newClient(u)
 	if err != nil {
 		return fmt.Errorf("unable to create bitbucket client: %w", err)
 	}
 	status := &bb.BuildStatus{
 		State:       convertStatus(pipeline.Status),
-		URL:         common.GetPipelineStatusLink(repo, pipeline, step),
-		Key:         common.GetPipelineStatusContext(repo, pipeline, step),
+		URL:         common.GetPipelineStatusLink(repo, pipeline, workflow),
+		Key:         common.GetPipelineStatusContext(repo, pipeline, workflow),
 		Description: common.GetPipelineStatusDescription(pipeline.Status),
 	}
 	_, err = bc.Projects.CreateBuildStatus(ctx, repo.Owner, repo.Name, pipeline.Commit, status)
@@ -284,7 +289,7 @@ func (c *client) Netrc(_ *model.User, r *model.Repo) (*model.Netrc, error) {
 }
 
 // Branches returns the names of all branches for the named repository.
-func (c *client) Branches(ctx context.Context, u *model.User, r *model.Repo) ([]string, error) {
+func (c *client) Branches(ctx context.Context, u *model.User, r *model.Repo, _ *model.ListOptions) ([]string, error) {
 	bc, err := c.newClient(u)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create bitbucket client: %w", err)
@@ -329,7 +334,7 @@ func (c *client) BranchHead(ctx context.Context, u *model.User, r *model.Repo, b
 	return "", fmt.Errorf("no matching branches found")
 }
 
-func (c *client) PullRequests(ctx context.Context, u *model.User, r *model.Repo, p *model.PaginationData) ([]*model.PullRequest, error) {
+func (c *client) PullRequests(ctx context.Context, u *model.User, r *model.Repo, p *model.ListOptions) ([]*model.PullRequest, error) {
 	bc, err := c.newClient(u)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create bitbucket client: %w", err)
@@ -424,10 +429,10 @@ func (c *client) Hook(ctx context.Context, r *http.Request) (*model.Repo, *model
 	switch e := ev.(type) {
 	case *bb.RepositoryPushEvent:
 		repo = convertRepo(&e.Repository, nil, "")
-		pipe = convertRepositoryPushEvent(e, c.URL)
+		pipe = convertRepositoryPushEvent(e, c.url)
 	case *bb.PullRequestEvent:
 		repo = convertRepo(&e.PullRequest.Source.Repository, nil, "")
-		pipe = convertPullRequestEvent(e, c.URL)
+		pipe = convertPullRequestEvent(e, c.url)
 	default:
 		return nil, nil, nil
 	}
@@ -509,6 +514,12 @@ func (*client) TeamPerm(_ *model.User, _ string) (*model.Perm, error) {
 // OrgMembership returns if user is member of organization and if user
 // is admin/owner in this organization.
 func (c *client) OrgMembership(_ context.Context, _ *model.User, _ string) (*model.OrgPerm, error) {
+	// TODO: Not implemented currently
+	return nil, nil
+}
+
+// Org fetches the organization from the forge by name. If the name is a user an org with type user is returned.
+func (c *client) Org(ctx context.Context, u *model.User, owner string) (*model.Org, error) {
 	// TODO: Not implemented currently
 	return nil, nil
 }

@@ -58,7 +58,7 @@ func Test_stash(t *testing.T) {
 				})
 				g.Assert(err).IsNil()
 				g.Assert(forge).IsNotNil()
-				g.Assert(forge.(*client).URL).Equal("http://localhost:8080")
+				g.Assert(forge.(*client).url).Equal("http://localhost:8080")
 				g.Assert(forge.(*client).Username).Equal("0ZXh0IjoiI")
 				g.Assert(forge.(*client).Password).Equal("I1NiIsInR5")
 				g.Assert(forge.(*client).SkipVerify).Equal(true)
