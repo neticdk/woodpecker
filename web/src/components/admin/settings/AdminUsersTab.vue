@@ -1,22 +1,21 @@
 <template>
-  <Panel>
-    <div class="flex flex-row border-b mb-4 pb-4 items-center dark:border-gray-600">
-      <div class="ml-2">
-        <h1 class="text-xl text-color">{{ $t('admin.settings.users.users') }}</h1>
-        <p class="text-sm text-color-alt">{{ $t('admin.settings.users.desc') }}</p>
-      </div>
+  <Settings :title="$t('admin.settings.users.users')" :desc="$t('admin.settings.users.desc')">
+    <template #titleActions>
       <Button
         v-if="selectedUser"
-        class="ml-auto"
         :text="$t('admin.settings.users.show')"
         start-icon="back"
         @click="selectedUser = undefined"
       />
-      <Button v-else class="ml-auto" :text="$t('admin.settings.users.add')" start-icon="plus" @click="showAddUser" />
-    </div>
+      <Button v-else :text="$t('admin.settings.users.add')" start-icon="plus" @click="showAddUser" />
+    </template>
 
-    <div v-if="!selectedUser" class="space-y-4 text-color">
-      <ListItem v-for="user in users" :key="user.id" class="items-center gap-2">
+    <div v-if="!selectedUser" class="space-y-4 text-wp-text-100">
+      <ListItem
+        v-for="user in users"
+        :key="user.id"
+        class="items-center gap-2 !bg-wp-background-200 !dark:bg-wp-background-100"
+      >
         <img v-if="user.avatar_url" class="rounded-md h-6" :src="user.avatar_url" />
         <span>{{ user.login }}</span>
         <Badge
@@ -34,7 +33,7 @@
         <IconButton
           icon="trash"
           :title="$t('admin.settings.users.delete_user')"
-          class="ml-2 w-8 h-8 hover:text-red-400 hover:dark:text-red-500"
+          class="ml-2 w-8 h-8 hover:text-wp-control-error-100"
           :is-loading="isDeleting"
           @click="deleteUser(user)"
         />
@@ -79,12 +78,12 @@
         </div>
       </form>
     </div>
-  </Panel>
+  </Settings>
 </template>
 
 <script lang="ts" setup>
 import { cloneDeep } from 'lodash';
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 import Badge from '~/components/atomic/Badge.vue';
@@ -93,23 +92,25 @@ import IconButton from '~/components/atomic/IconButton.vue';
 import ListItem from '~/components/atomic/ListItem.vue';
 import InputField from '~/components/form/InputField.vue';
 import TextField from '~/components/form/TextField.vue';
-import Panel from '~/components/layout/Panel.vue';
+import Settings from '~/components/layout/Settings.vue';
 import useApiClient from '~/compositions/useApiClient';
 import { useAsyncAction } from '~/compositions/useAsyncAction';
 import useNotifications from '~/compositions/useNotifications';
+import { usePagination } from '~/compositions/usePaginate';
 import { User } from '~/lib/api/types';
 
 const apiClient = useApiClient();
 const notifications = useNotifications();
 const { t } = useI18n();
 
-const users = ref<User[]>([]);
 const selectedUser = ref<Partial<User>>();
 const isEditingUser = computed(() => !!selectedUser.value?.id);
 
-async function loadUsers() {
-  users.value = await apiClient.getUsers();
+async function loadUsers(page: number): Promise<User[] | null> {
+  return apiClient.getUsers(page);
 }
+
+const { resetPage, data: users } = usePagination(loadUsers, () => !selectedUser.value);
 
 const { doSubmit: saveUser, isLoading: isSaving } = useAsyncAction(async () => {
   if (!selectedUser.value) {
@@ -122,7 +123,6 @@ const { doSubmit: saveUser, isLoading: isSaving } = useAsyncAction(async () => {
       title: t('admin.settings.users.saved'),
       type: 'success',
     });
-    selectedUser.value = undefined;
   } else {
     selectedUser.value = await apiClient.createUser(selectedUser.value);
     notifications.notify({
@@ -130,7 +130,8 @@ const { doSubmit: saveUser, isLoading: isSaving } = useAsyncAction(async () => {
       type: 'success',
     });
   }
-  await loadUsers();
+  selectedUser.value = undefined;
+  resetPage();
 });
 
 const { doSubmit: deleteUser, isLoading: isDeleting } = useAsyncAction(async (_user: User) => {
@@ -141,7 +142,7 @@ const { doSubmit: deleteUser, isLoading: isDeleting } = useAsyncAction(async (_u
 
   await apiClient.deleteUser(_user);
   notifications.notify({ title: t('admin.settings.users.deleted'), type: 'success' });
-  await loadUsers();
+  resetPage();
 });
 
 function editUser(user: User) {
@@ -151,16 +152,4 @@ function editUser(user: User) {
 function showAddUser() {
   selectedUser.value = cloneDeep({ login: '' });
 }
-
-const reloadInterval = ref<number>();
-onMounted(async () => {
-  await loadUsers();
-  reloadInterval.value = window.setInterval(loadUsers, 5000);
-});
-
-onBeforeUnmount(() => {
-  if (reloadInterval.value) {
-    window.clearInterval(reloadInterval.value);
-  }
-});
 </script>

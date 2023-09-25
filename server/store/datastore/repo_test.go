@@ -140,7 +140,7 @@ func TestRepos(t *testing.T) {
 }
 
 func TestRepoList(t *testing.T) {
-	store, closer := newTestStore(t, new(model.Repo), new(model.User), new(model.Perm))
+	store, closer := newTestStore(t, new(model.Repo), new(model.User), new(model.Perm), new(model.Org))
 	defer closer()
 
 	user := &model.User{
@@ -179,7 +179,7 @@ func TestRepoList(t *testing.T) {
 		assert.NoError(t, store.PermUpsert(perm))
 	}
 
-	repos, err := store.RepoList(user, false)
+	repos, err := store.RepoList(user, false, false)
 	if err != nil {
 		t.Error(err)
 		return
@@ -196,7 +196,7 @@ func TestRepoList(t *testing.T) {
 }
 
 func TestOwnedRepoList(t *testing.T) {
-	store, closer := newTestStore(t, new(model.Repo), new(model.User), new(model.Perm))
+	store, closer := newTestStore(t, new(model.Repo), new(model.User), new(model.Perm), new(model.Org))
 	defer closer()
 
 	user := &model.User{
@@ -244,7 +244,7 @@ func TestOwnedRepoList(t *testing.T) {
 		assert.NoError(t, store.PermUpsert(perm))
 	}
 
-	repos, err := store.RepoList(user, true)
+	repos, err := store.RepoList(user, true, false)
 	if err != nil {
 		t.Error(err)
 		return
@@ -299,9 +299,8 @@ func TestRepoCrud(t *testing.T) {
 		new(model.Perm),
 		new(model.Pipeline),
 		new(model.PipelineConfig),
-		new(model.Logs),
+		new(model.LogEntry),
 		new(model.Step),
-		new(model.File),
 		new(model.Secret),
 		new(model.Registry),
 		new(model.Config),
@@ -335,6 +334,7 @@ func TestRepoCrud(t *testing.T) {
 		RepoID: repoUnrelated.ID,
 	}
 	stepUnrelated := model.Step{
+		UUID: "44c0de71-a6be-41c9-b860-e3716d1dfcef",
 		Name: "a unrelated step",
 	}
 	assert.NoError(t, store.CreatePipeline(&pipelineUnrelated, &stepUnrelated))

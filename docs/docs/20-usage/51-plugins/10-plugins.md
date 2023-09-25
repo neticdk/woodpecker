@@ -7,7 +7,7 @@ They are automatically pulled from the default container registry the agent's ha
 Example pipeline using the Docker and Slack plugins:
 
 ```yaml
-pipeline:
+steps:
   build:
     image: golang
     commands:
@@ -40,7 +40,7 @@ For official plugins, you can use the Woodpecker plugin index:
 There are also other plugin lists with additional plugins. Keep in mind that [Drone](https://www.drone.io/) plugins are generally supported, but could need some adjustments and tweaking.
 
 - [Drone Plugins](http://plugins.drone.io)
-- [The Geek Lab Drone Plugins](https://drone-plugin-index.geekdocs.de/plugins/drone-matrix/)
+- [Geeklab Woodpecker Plugins](https://woodpecker-plugins.geekdocs.de/)
 :::
 
 ## Creating a plugin

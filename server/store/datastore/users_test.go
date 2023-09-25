@@ -24,7 +24,7 @@ import (
 )
 
 func TestUsers(t *testing.T) {
-	store, closer := newTestStore(t, new(model.User), new(model.Repo), new(model.Pipeline), new(model.Step), new(model.Perm))
+	store, closer := newTestStore(t, new(model.User), new(model.Repo), new(model.Pipeline), new(model.Step), new(model.Perm), new(model.Org), new(model.Secret))
 	defer closer()
 
 	g := goblin.Goblin(t)
@@ -39,6 +39,8 @@ func TestUsers(t *testing.T) {
 			_, err = store.engine.Exec("DELETE FROM pipelines")
 			g.Assert(err).IsNil()
 			_, err = store.engine.Exec("DELETE FROM steps")
+			g.Assert(err).IsNil()
+			_, err = store.engine.Exec("DELETE FROM orgs")
 			g.Assert(err).IsNil()
 		})
 
@@ -132,7 +134,7 @@ func TestUsers(t *testing.T) {
 			}
 			g.Assert(store.CreateUser(&user1)).IsNil()
 			g.Assert(store.CreateUser(&user2)).IsNil()
-			users, err := store.GetUserList()
+			users, err := store.GetUserList(&model.ListOptions{Page: 1, PerPage: 50})
 			g.Assert(err).IsNil()
 			g.Assert(len(users)).Equal(2)
 			g.Assert(users[0].Login).Equal(user1.Login)
@@ -245,9 +247,9 @@ func TestUsers(t *testing.T) {
 			pipelines, err := store.UserFeed(user)
 			g.Assert(err).IsNil()
 			g.Assert(len(pipelines)).Equal(3)
-			g.Assert(pipelines[0].FullName).Equal(repo2.FullName)
-			g.Assert(pipelines[1].FullName).Equal(repo1.FullName)
-			g.Assert(pipelines[2].FullName).Equal(repo1.FullName)
+			g.Assert(pipelines[0].RepoID).Equal(repo2.ID)
+			g.Assert(pipelines[1].RepoID).Equal(repo1.ID)
+			g.Assert(pipelines[2].RepoID).Equal(repo1.ID)
 		})
 	})
 }

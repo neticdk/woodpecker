@@ -52,6 +52,7 @@ func convertRepo(from *internal.Repo, perm *internal.RepoPerm) *model.Repo {
 	repo := model.Repo{
 		ForgeRemoteID: model.ForgeRemoteID(from.UUID),
 		Clone:         cloneLink(from),
+		CloneSSH:      sshCloneLink(from),
 		Owner:         strings.Split(from.FullName, "/")[0],
 		Name:          strings.Split(from.FullName, "/")[1],
 		FullName:      from.FullName,
@@ -59,7 +60,7 @@ func convertRepo(from *internal.Repo, perm *internal.RepoPerm) *model.Repo {
 		IsSCMPrivate:  from.IsPrivate,
 		Avatar:        from.Owner.Links.Avatar.Href,
 		SCMKind:       model.SCMKind(from.Scm),
-		Branch:        "master",
+		Branch:        from.Mainbranch.Name,
 		Perm:          convertPerm(perm),
 	}
 	if repo.SCMKind == model.RepoHg {
@@ -114,15 +115,28 @@ func cloneLink(repo *internal.Repo) string {
 	return clone
 }
 
+// cloneLink is a helper function that tries to extract the clone url from the
+// repository object.
+func sshCloneLink(repo *internal.Repo) string {
+	for _, link := range repo.Links.Clone {
+		if link.Name == "ssh" {
+			return link.Href
+		}
+	}
+
+	return ""
+}
+
 // convertUser is a helper function used to convert a Bitbucket user account
 // structure to the Woodpecker User structure.
 func convertUser(from *internal.Account, token *oauth2.Token) *model.User {
 	return &model.User{
-		Login:  from.Login,
-		Token:  token.AccessToken,
-		Secret: token.RefreshToken,
-		Expiry: token.Expiry.UTC().Unix(),
-		Avatar: from.Links.Avatar.Href,
+		Login:         from.Login,
+		Token:         token.AccessToken,
+		Secret:        token.RefreshToken,
+		Expiry:        token.Expiry.UTC().Unix(),
+		Avatar:        from.Links.Avatar.Href,
+		ForgeRemoteID: model.ForgeRemoteID(fmt.Sprint(from.ID)),
 	}
 }
 

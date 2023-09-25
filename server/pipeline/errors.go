@@ -24,6 +24,14 @@ func (e ErrNotFound) Error() string {
 	return e.Msg
 }
 
+func (e ErrNotFound) Is(target error) bool {
+	_, ok := target.(ErrNotFound) //nolint:errorlint
+	if !ok {
+		_, ok = target.(*ErrNotFound) //nolint:errorlint
+	}
+	return ok
+}
+
 type ErrBadRequest struct {
 	Msg string
 }
@@ -33,6 +41,6 @@ func (e ErrBadRequest) Error() string {
 }
 
 var (
-	ErrFilteredRestrictions = errors.New("ignoring hook: branch does not match restrictions defined in yaml")
+	ErrFilteredRestrictions = errors.New("ignoring hook: branch does not match restrictions defined in yaml") // global when filter of all workflows do skip this pipeline
 	ErrFilteredSteps        = errors.New("ignoring hook: step conditions yield zero runnable steps")
 )
