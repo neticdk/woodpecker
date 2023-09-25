@@ -43,7 +43,11 @@ jobs:
           pnpm build
 
       - name: Build server
-        run: make cross-compile-server
+        run: |
+          export PATH=$PATH:$(go env GOPATH)/bin
+          echo $PATH
+          go install src.techknowlogick.com/xgo@latest
+          make cross-compile-server
         env:
           PLATFORMS: linux|amd64
           TAGS: bindata sqlite sqlite_unlock_notify netgo
