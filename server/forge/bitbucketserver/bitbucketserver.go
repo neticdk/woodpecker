@@ -289,23 +289,23 @@ func (c *client) Netrc(_ *model.User, r *model.Repo) (*model.Netrc, error) {
 }
 
 // Branches returns the names of all branches for the named repository.
-func (c *client) Branches(ctx context.Context, u *model.User, r *model.Repo, _ *model.ListOptions) ([]string, error) {
+func (c *client) Branches(ctx context.Context, u *model.User, r *model.Repo, p *model.ListOptions) ([]string, error) {
 	bc, err := c.newClient(u)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create bitbucket client: %w", err)
 	}
 
-	opts := &bb.BranchSearchOptions{}
+	opts := &bb.BranchSearchOptions{ListOptions: convertListOptions(p)}
 	var all []string
 	for {
 		branches, resp, err := bc.Projects.SearchBranches(ctx, r.Owner, r.Name, opts)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("unable to list branches: %w", err)
 		}
 		for _, b := range branches {
 			all = append(all, b.DisplayID)
 		}
-		if resp.LastPage {
+		if !p.All || resp.LastPage {
 			break
 		}
 		opts.Start = resp.NextPageStart
@@ -340,15 +340,20 @@ func (c *client) PullRequests(ctx context.Context, u *model.User, r *model.Repo,
 		return nil, fmt.Errorf("unable to create bitbucket client: %w", err)
 	}
 
-	opts := &bb.PullRequestSearchOptions{ListOptions: bb.ListOptions{Limit: uint(p.PerPage), Start: uint((p.Page - 1) * p.PerPage)}}
-	prs, _, err := bc.Projects.SearchPullRequests(ctx, r.Owner, r.Name, opts)
-	if err != nil {
-		return nil, fmt.Errorf("unable to list pull-requests: %w", err)
-	}
-
+	opts := &bb.PullRequestSearchOptions{ListOptions: convertListOptions(p)}
 	var all []*model.PullRequest
-	for _, pr := range prs {
-		all = append(all, &model.PullRequest{Index: int64(pr.ID), Title: pr.Title})
+	for {
+		prs, resp, err := bc.Projects.SearchPullRequests(ctx, r.Owner, r.Name, opts)
+		if err != nil {
+			return nil, fmt.Errorf("unable to list pull-requests: %w", err)
+		}
+		for _, pr := range prs {
+			all = append(all, &model.PullRequest{Index: int64(pr.ID), Title: pr.Title})
+		}
+		if !p.All || resp.LastPage {
+			break
+		}
+		opts.Start = resp.NextPageStart
 	}
 
 	return all, nil

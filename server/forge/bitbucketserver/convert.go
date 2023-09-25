@@ -132,3 +132,10 @@ func convertUser(user *bb.User, token, baseURL string) *model.User {
 func bitbucketAvatarURL(baseURL, slug string) string {
 	return fmt.Sprintf("%s/users/%s/avatar.png", baseURL, slug)
 }
+
+func convertListOptions(p *model.ListOptions) bb.ListOptions {
+	if p.All {
+		return bb.ListOptions{}
+	}
+	return bb.ListOptions{Limit: uint(p.PerPage), Start: uint((p.Page - 1) * p.PerPage)}
+}
