@@ -195,7 +195,7 @@ func (c *client) Repos(ctx context.Context, u *model.User) ([]*model.Repo, error
 		return nil, fmt.Errorf("unable to create bitbucket client: %w", err)
 	}
 
-	opts := &bb.RepositorySearchOptions{Permission: bb.PermissionRepoAdmin, ListOptions: bb.ListOptions{Limit: 250}}
+	opts := &bb.RepositorySearchOptions{Permission: bb.PermissionRepoRead, ListOptions: bb.ListOptions{Limit: 250}}
 	var all []*model.Repo
 	for {
 		repos, resp, err := bc.Projects.SearchRepositories(ctx, opts)
@@ -203,8 +203,29 @@ func (c *client) Repos(ctx context.Context, u *model.User) ([]*model.Repo, error
 			return nil, fmt.Errorf("unable to search repositories: %w", err)
 		}
 		for _, r := range repos {
-			perms := &model.Perm{Pull: true, Push: true, Admin: true}
+			perms := &model.Perm{Pull: true, Push: false, Admin: false}
 			all = append(all, convertRepo(r, perms, ""))
+		}
+		if resp.LastPage {
+			break
+		}
+		opts.Start = resp.NextPageStart
+	}
+
+	// Add admin permissions to relevant repositories
+	opts = &bb.RepositorySearchOptions{Permission: bb.PermissionRepoAdmin, ListOptions: bb.ListOptions{Limit: 250}}
+	for {
+		repos, resp, err := bc.Projects.SearchRepositories(ctx, opts)
+		if err != nil {
+			return nil, fmt.Errorf("unable to search repositories: %w", err)
+		}
+		for _, r := range repos {
+			for i, c := range all {
+				if c.ForgeRemoteID == model.ForgeRemoteID(fmt.Sprintf("%d", r.ID)) {
+					all[i].Perm = &model.Perm{Pull: true, Push: true, Admin: true}
+					break
+				}
+			}
 		}
 		if resp.LastPage {
 			break
