@@ -41,6 +41,6 @@ func (e ErrBadRequest) Error() string {
 }
 
 var (
-	ErrFilteredRestrictions = errors.New("ignoring hook: branch does not match restrictions defined in yaml") // global when filter of all workflows do skip this pipeline
+	ErrFilteredRestrictions = errors.New("ignoring hook: branch does not match restrictions defined in yaml")
 	ErrFilteredSteps        = errors.New("ignoring hook: step conditions yield zero runnable steps")
 )
