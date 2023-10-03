@@ -331,8 +331,8 @@ github.com/mrjones/oauth v0.0.0-20190623134757-126b35219450 h1:j2kD3MT1z4PXCiUll
 github.com/mrjones/oauth v0.0.0-20190623134757-126b35219450/go.mod h1:skjdDftzkFALcuGzYSklqYd8gvat6F1gZJ4YPVbkZpM=
 github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 h1:C3w9PqII01/Oq1c1nUAm88MOHcQC9l5mIlSMApZMrHA=
 github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822/go.mod h1:+n7T8mK8HuQTcFwEeznm/DIxMOiR9yIdICNftLE1DvQ=
-github.com/neticdk/go-bitbucket v0.1.2 h1:V7xC3hd3fOGFjGyhfVaf87f6wjo97z9lv3T6gLxtXUo=
-github.com/neticdk/go-bitbucket v0.1.2/go.mod h1:IrHeWO1CrNi0DlOvfhAA9bGRSeNSUB6/SAfzmwbA5aU=
+github.com/neticdk/go-bitbucket v1.0.0 h1:FPvHEgPHoDwD2VHbpyu2R2gnoWQ867RxZd2FivS4wSw=
+github.com/neticdk/go-bitbucket v1.0.0/go.mod h1:IrHeWO1CrNi0DlOvfhAA9bGRSeNSUB6/SAfzmwbA5aU=
 github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e/go.mod h1:zD1mROLANZcx1PVRCS0qkT7pwLkGfwJo4zjcN/Tysno=
 github.com/nxadm/tail v1.4.4/go.mod h1:kenIhsEOeOJmVchQTgglprH7qJGnHDVpk1VPCcaMI8A=
 github.com/nxadm/tail v1.4.8 h1:nPr65rt6Y5JFSKQO7qToXr7pePgD6Gwiw05lkbyAQTE=

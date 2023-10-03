@@ -36,6 +36,7 @@ require (
 	github.com/moby/moby v20.10.25+incompatible
 	github.com/moby/term v0.5.0
 	github.com/mrjones/oauth v0.0.0-20190623134757-126b35219450
+	github.com/neticdk/go-bitbucket v1.0.0
 	github.com/oklog/ulid/v2 v2.1.0
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.16.0
@@ -123,7 +124,6 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/morikuni/aec v1.0.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
-	github.com/neticdk/go-bitbucket v0.1.2
 	github.com/onsi/ginkgo v1.16.4 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.0.2 // indirect
