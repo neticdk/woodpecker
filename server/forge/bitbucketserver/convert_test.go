@@ -111,6 +111,18 @@ func Test_helper(t *testing.T) {
 				},
 				{
 					from: &bb.RepositoryPushEvent{
+						Changes: []bb.RepositoryPushEventChange{
+							{
+								FromHash: "0000000000000000000000000000000000000000",
+								ToHash:   "1234567890abcdef",
+								Type:     bb.RepositoryPushEventChangeTypeDelete,
+							},
+						},
+					},
+					to: nil,
+				},
+				{
+					from: &bb.RepositoryPushEvent{
 						Event: bb.Event{
 							Date: bb.ISOTime(now),
 							Actor: bb.User{
