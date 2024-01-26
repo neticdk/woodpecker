@@ -45,8 +45,6 @@ jobs:
       - name: Build server
         run: |
           make release-server
-          mkdir -p dist/server/linux/amd64
-          mv dist/server/linux_amd64/woodpecker-server dist/server/linux/amd64/woodpecker-server
         env:
           PLATFORMS: linux|amd64
           TAGS: bindata sqlite sqlite_unlock_notify netgo
