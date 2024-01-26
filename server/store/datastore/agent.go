@@ -48,7 +48,7 @@ func (s storage) AgentCreate(agent *model.Agent) error {
 }
 
 func (s storage) AgentUpdate(agent *model.Agent) error {
-	_, err := s.engine.ID(agent.ID).AllCols().Update(agent)
+	_, err := s.engine.ID(agent.ID).AllCols().NoVersionCheck().Update(agent)
 	return err
 }
 
