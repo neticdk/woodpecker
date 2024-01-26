@@ -359,6 +359,7 @@ func (s *RPC) RegisterAgent(ctx context.Context, platform, backend, version stri
 
 	err = s.store.AgentUpdate(agent)
 	if err != nil {
+		log.Error().Err(err).Msg("unable to update agent")
 		return -1, err
 	}
 
@@ -460,7 +461,9 @@ func (s *RPC) getAgentFromContext(ctx context.Context) (*model.Agent, error) {
 		return nil, errors.New("agent_id is not a valid integer")
 	}
 
-	return s.store.AgentFind(agentID)
+	ag, err := s.store.AgentFind(agentID)
+	log.Error().Err(err).Msg("Unable to get agent")
+	return ag, err
 }
 
 func (s *RPC) getHostnameFromContext(ctx context.Context) (string, error) {
