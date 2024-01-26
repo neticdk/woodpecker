@@ -26,23 +26,23 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
 
-	"github.com/woodpecker-ci/woodpecker/server"
-	"github.com/woodpecker-ci/woodpecker/server/forge/types"
-	"github.com/woodpecker-ci/woodpecker/server/model"
-	"github.com/woodpecker-ci/woodpecker/server/pipeline"
-	"github.com/woodpecker-ci/woodpecker/server/store"
-	"github.com/woodpecker-ci/woodpecker/shared/token"
+	"go.woodpecker-ci.org/woodpecker/v2/server"
+	"go.woodpecker-ci.org/woodpecker/v2/server/forge/types"
+	"go.woodpecker-ci.org/woodpecker/v2/server/model"
+	"go.woodpecker-ci.org/woodpecker/v2/server/pipeline"
+	"go.woodpecker-ci.org/woodpecker/v2/server/store"
+	"go.woodpecker-ci.org/woodpecker/v2/shared/token"
 )
 
 // GetQueueInfo
 //
-//	@Summary	Get pipeline queue information
+//	@Summary		Get pipeline queue information
 //	@Description	TODO: link the InfoT response object - this is blocked, until the `swaggo/swag` tool dependency is v1.18.12 or newer
-//	@Router		/queue/info [get]
-//	@Produce	json
-//	@Success	200	{object} map[string]string
-//	@Tags		Pipeline queues
-//	@Param		Authorization	header	string	true	"Insert your personal access token"	default(Bearer <personal access token>)
+//	@Router			/queue/info [get]
+//	@Produce		json
+//	@Success		200	{object}	map[string]string
+//	@Tags			Pipeline queues
+//	@Param			Authorization	header	string	true	"Insert your personal access token"	default(Bearer <personal access token>)
 func GetQueueInfo(c *gin.Context) {
 	c.IndentedJSON(http.StatusOK,
 		server.Config.Services.Queue.Info(c),
@@ -54,12 +54,12 @@ func GetQueueInfo(c *gin.Context) {
 //	@Summary	Pause a pipeline queue
 //	@Router		/queue/pause [post]
 //	@Produce	plain
-//	@Success	200
+//	@Success	204
 //	@Tags		Pipeline queues
 //	@Param		Authorization	header	string	true	"Insert your personal access token"	default(Bearer <personal access token>)
 func PauseQueue(c *gin.Context) {
 	server.Config.Services.Queue.Pause()
-	c.Status(http.StatusOK)
+	c.Status(http.StatusNoContent)
 }
 
 // ResumeQueue
@@ -67,12 +67,12 @@ func PauseQueue(c *gin.Context) {
 //	@Summary	Resume a pipeline queue
 //	@Router		/queue/resume [post]
 //	@Produce	plain
-//	@Success	200
+//	@Success	204
 //	@Tags		Pipeline queues
 //	@Param		Authorization	header	string	true	"Insert your personal access token"	default(Bearer <personal access token>)
 func ResumeQueue(c *gin.Context) {
 	server.Config.Services.Queue.Resume()
-	c.Status(http.StatusOK)
+	c.Status(http.StatusNoContent)
 }
 
 // BlockTilQueueHasRunningItem
@@ -80,7 +80,7 @@ func ResumeQueue(c *gin.Context) {
 //	@Summary	Block til pipeline queue has a running item
 //	@Router		/queue/norunningpipelines [get]
 //	@Produce	plain
-//	@Success	200
+//	@Success	204
 //	@Tags		Pipeline queues
 //	@Param		Authorization	header	string	true	"Insert your personal access token"	default(Bearer <personal access token>)
 func BlockTilQueueHasRunningItem(c *gin.Context) {
@@ -90,7 +90,7 @@ func BlockTilQueueHasRunningItem(c *gin.Context) {
 			break
 		}
 	}
-	c.Status(http.StatusOK)
+	c.Status(http.StatusNoContent)
 }
 
 // PostHook
@@ -144,7 +144,7 @@ func PostHook(c *gin.Context) {
 	repo, err := _store.GetRepoNameFallback(tmpRepo.ForgeRemoteID, tmpRepo.FullName)
 	if err != nil {
 		log.Error().Err(err).Msgf("failure to get repo %s from store", tmpRepo.FullName)
-		handleDbError(c, err)
+		handleDBError(c, err)
 		return
 	}
 	if !repo.IsActive {
@@ -216,7 +216,7 @@ func PostHook(c *gin.Context) {
 	// 5. Check if pull requests are allowed for this repo
 	//
 
-	if tmpPipeline.Event == model.EventPull && !repo.AllowPull {
+	if (tmpPipeline.Event == model.EventPull || tmpPipeline.Event == model.EventPullClosed) && !repo.AllowPull {
 		log.Debug().Str("repo", repo.FullName).Msg("ignoring hook: pull requests are disabled for this repo in woodpecker")
 		c.Status(http.StatusNoContent)
 		return

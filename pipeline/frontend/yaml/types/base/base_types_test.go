@@ -18,9 +18,8 @@ import (
 	"fmt"
 	"testing"
 
-	"gopkg.in/yaml.v3"
-
 	"github.com/stretchr/testify/assert"
+	"gopkg.in/yaml.v3"
 )
 
 type StructStringorInt struct {
@@ -35,7 +34,7 @@ func TestStringorIntYaml(t *testing.T) {
 		assert.Equal(t, StringOrInt(10), s.Foo)
 
 		d, err := yaml.Marshal(&s)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 
 		s2 := StructStringorInt{}
 		assert.NoError(t, yaml.Unmarshal(d, &s2))
@@ -49,20 +48,27 @@ type StructStringOrSlice struct {
 }
 
 func TestStringOrSliceYaml(t *testing.T) {
-	str := `{foo: [bar, baz]}`
-
+	str := `{foo: [bar, "baz"]}`
 	s := StructStringOrSlice{}
 	assert.NoError(t, yaml.Unmarshal([]byte(str), &s))
-
 	assert.Equal(t, StringOrSlice{"bar", "baz"}, s.Foo)
 
 	d, err := yaml.Marshal(&s)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 
-	s2 := StructStringOrSlice{}
-	assert.NoError(t, yaml.Unmarshal(d, &s2))
+	s = StructStringOrSlice{}
+	assert.NoError(t, yaml.Unmarshal(d, &s))
+	assert.Equal(t, StringOrSlice{"bar", "baz"}, s.Foo)
 
-	assert.Equal(t, StringOrSlice{"bar", "baz"}, s2.Foo)
+	str = `{foo: []}`
+	s = StructStringOrSlice{}
+	assert.NoError(t, yaml.Unmarshal([]byte(str), &s))
+	assert.Equal(t, StringOrSlice{}, s.Foo)
+
+	str = `{}`
+	s = StructStringOrSlice{}
+	assert.NoError(t, yaml.Unmarshal([]byte(str), &s))
+	assert.Nil(t, s.Foo)
 }
 
 type StructSliceorMap struct {
@@ -79,7 +85,7 @@ func TestSliceOrMapYaml(t *testing.T) {
 	assert.Equal(t, SliceOrMap{"bar": "baz", "far": "faz"}, s.Foos)
 
 	d, err := yaml.Marshal(&s)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 
 	s2 := StructSliceorMap{}
 	assert.NoError(t, yaml.Unmarshal(d, &s2))
@@ -97,7 +103,7 @@ bars: []
 func TestUnmarshalSliceOrMap(t *testing.T) {
 	s := StructSliceorMap{}
 	err := yaml.Unmarshal([]byte(sampleStructSliceorMap), &s)
-	assert.Equal(t, fmt.Errorf("Cannot unmarshal 'true' of type bool into a string value"), err)
+	assert.Equal(t, fmt.Errorf("cannot unmarshal 'true' of type bool into a string value"), err)
 }
 
 func TestStr2SliceOrMapPtrMap(t *testing.T) {
@@ -106,7 +112,7 @@ func TestStr2SliceOrMapPtrMap(t *testing.T) {
 		Bars: []string{},
 	}}
 	d, err := yaml.Marshal(&s)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 
 	s2 := map[string]*StructSliceorMap{}
 	assert.NoError(t, yaml.Unmarshal(d, &s2))

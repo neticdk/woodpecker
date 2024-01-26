@@ -19,10 +19,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/woodpecker-ci/woodpecker/server/forge"
-	"github.com/woodpecker-ci/woodpecker/server/model"
-
 	"github.com/jellydator/ttlcache/v3"
+
+	"go.woodpecker-ci.org/woodpecker/v2/server/forge"
+	"go.woodpecker-ci.org/woodpecker/v2/server/model"
 )
 
 // MembershipService is a service to check for user membership.

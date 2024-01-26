@@ -25,9 +25,9 @@ import (
 	"github.com/franela/goblin"
 	"github.com/gin-gonic/gin"
 
-	"github.com/woodpecker-ci/woodpecker/server/forge/bitbucket/fixtures"
-	"github.com/woodpecker-ci/woodpecker/server/forge/bitbucket/internal"
-	"github.com/woodpecker-ci/woodpecker/server/model"
+	"go.woodpecker-ci.org/woodpecker/v2/server/forge/bitbucket/fixtures"
+	"go.woodpecker-ci.org/woodpecker/v2/server/forge/bitbucket/internal"
+	"go.woodpecker-ci.org/woodpecker/v2/server/model"
 )
 
 func Test_bitbucket(t *testing.T) {
@@ -45,10 +45,12 @@ func Test_bitbucket(t *testing.T) {
 
 		g.It("Should return client with default endpoint", func() {
 			forge, _ := New(&Opts{Client: "4vyW6b49Z", Secret: "a5012f6c6"})
-			g.Assert(forge.(*config).url).Equal(DefaultURL)
-			g.Assert(forge.(*config).API).Equal(DefaultAPI)
-			g.Assert(forge.(*config).Client).Equal("4vyW6b49Z")
-			g.Assert(forge.(*config).Secret).Equal("a5012f6c6")
+
+			f, _ := forge.(*config)
+			g.Assert(f.url).Equal(DefaultURL)
+			g.Assert(f.API).Equal(DefaultAPI)
+			g.Assert(f.Client).Equal("4vyW6b49Z")
+			g.Assert(f.Secret).Equal("a5012f6c6")
 		})
 
 		g.It("Should return the netrc file", func() {
@@ -200,7 +202,7 @@ func Test_bitbucket(t *testing.T) {
 				repoPRs, err := c.PullRequests(ctx, fakeUser, fakeRepo, &listOpts)
 				g.Assert(err).IsNil()
 				g.Assert(repoPRs[0].Title).Equal("PRs title")
-				g.Assert(repoPRs[0].Index).Equal(int64(123))
+				g.Assert(repoPRs[0].Index).Equal(model.ForgeRemoteID("123"))
 			})
 			g.It("Should handle not found errors", func() {
 				_, err := c.PullRequests(ctx, fakeUser, fakeRepoNotFound, &listOpts)

@@ -13,9 +13,7 @@ You need to trust the external config service as it is getting secret informatio
 
 ## Config
 
-```shell
-# Server
-# ...
+```ini title="Server"
 WOODPECKER_CONFIG_SERVICE_ENDPOINT=https://example.com/ciconfig
 ```
 
@@ -56,9 +54,7 @@ WOODPECKER_CONFIG_SERVICE_ENDPOINT=https://example.com/ciconfig
     "author_avatar": "https://myforge.com/avatars/d6b3f7787a685fcdf2a44e2c685c7e03",
     "author_email": "my@email.com",
     "branch": "main",
-    "changed_files": [
-      "somefilename.txt"
-    ],
+    "changed_files": ["somefilename.txt"],
     "commit": "2fff90f8d288a4640e90f05049fe30e61a14fd50",
     "created_at": 0,
     "deploy_to": "",
@@ -87,8 +83,8 @@ WOODPECKER_CONFIG_SERVICE_ENDPOINT=https://example.com/ciconfig
   },
   "configs": [
     {
-      "name": ".woodpecker.yml",
-      "data": "steps:\n  backend:\n    image: alpine\n    commands:\n      - echo \"Hello there from Repo (.woodpecker.yml)\"\n"
+      "name": ".woodpecker.yaml",
+      "data": "steps:\n  - name: backend\n    image: alpine\n    commands:\n      - echo \"Hello there from Repo (.woodpecker.yaml)\"\n"
     }
   ]
 }
@@ -101,7 +97,7 @@ WOODPECKER_CONFIG_SERVICE_ENDPOINT=https://example.com/ciconfig
   "configs": [
     {
       "name": "central-override",
-      "data": "steps:\n  backend:\n    image: alpine\n    commands:\n      - echo \"Hello there from ConfigAPI\"\n"
+      "data": "steps:\n  - name: backend\n    image: alpine\n    commands:\n      - echo \"Hello there from ConfigAPI\"\n"
     }
   ]
 }

@@ -20,7 +20,7 @@ import (
 	"xorm.io/builder"
 	"xorm.io/xorm"
 
-	"github.com/woodpecker-ci/woodpecker/server/model"
+	"go.woodpecker-ci.org/woodpecker/v2/server/model"
 )
 
 func (s storage) GetPipeline(id int64) (*model.Pipeline, error) {
@@ -114,7 +114,6 @@ func (s storage) CreatePipeline(pipeline *model.Pipeline, stepList ...*model.Ste
 	pipeline.Number = number + 1
 
 	pipeline.Created = time.Now().UTC().Unix()
-	pipeline.Enqueued = pipeline.Created
 	// only Insert set auto created ID back to object
 	if _, err := sess.Insert(pipeline); err != nil {
 		return err
@@ -136,7 +135,11 @@ func (s storage) UpdatePipeline(pipeline *model.Pipeline) error {
 	return err
 }
 
-func deletePipeline(sess *xorm.Session, pipelineID int64) error {
+func (s storage) DeletePipeline(pipeline *model.Pipeline) error {
+	return s.deletePipeline(s.engine.NewSession(), pipeline.ID)
+}
+
+func (s storage) deletePipeline(sess *xorm.Session, pipelineID int64) error {
 	// delete related steps
 	for startSteps := 0; ; startSteps += perPage {
 		stepIDs := make([]int64, 0, perPage)
@@ -153,6 +156,28 @@ func deletePipeline(sess *xorm.Session, pipelineID int64) error {
 			}
 		}
 	}
+
+	if _, err := sess.Where("workflow_pipeline_id = ?", pipelineID).Delete(new(model.Workflow)); err != nil {
+		return err
+	}
+
+	var confIDs []int64
+	if err := sess.Table(new(model.PipelineConfig)).Select("config_id").Where("pipeline_id = ?", pipelineID).Find(&confIDs); err != nil {
+		return err
+	}
+	for _, confID := range confIDs {
+		exist, err := sess.Where(builder.Eq{"config_id": confID}.And(builder.Neq{"pipeline_id": pipelineID})).Exist(new(model.PipelineConfig))
+		if err != nil {
+			return err
+		}
+		if !exist {
+			// this config is only used for this pipeline. so delete it
+			if _, err := sess.Where(builder.Eq{"config_id": confID}).Delete(new(model.Config)); err != nil {
+				return err
+			}
+		}
+	}
+
 	if _, err := sess.Where("pipeline_id = ?", pipelineID).Delete(new(model.PipelineConfig)); err != nil {
 		return err
 	}

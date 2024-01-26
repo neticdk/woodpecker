@@ -18,17 +18,15 @@ import (
 	"fmt"
 	"path"
 
-	backend_types "github.com/woodpecker-ci/woodpecker/pipeline/backend/types"
-	"github.com/woodpecker-ci/woodpecker/pipeline/frontend/metadata"
-	yaml_types "github.com/woodpecker-ci/woodpecker/pipeline/frontend/yaml/types"
-	"github.com/woodpecker-ci/woodpecker/pipeline/frontend/yaml/utils"
-	"github.com/woodpecker-ci/woodpecker/shared/constant"
+	backend_types "go.woodpecker-ci.org/woodpecker/v2/pipeline/backend/types"
+	"go.woodpecker-ci.org/woodpecker/v2/pipeline/frontend/metadata"
+	yaml_types "go.woodpecker-ci.org/woodpecker/v2/pipeline/frontend/yaml/types"
+	"go.woodpecker-ci.org/woodpecker/v2/pipeline/frontend/yaml/utils"
+	"go.woodpecker-ci.org/woodpecker/v2/shared/constant"
 )
 
 const (
 	defaultCloneName = "clone"
-
-	nameServices = "services"
 )
 
 // Registry represents registry credentials
@@ -41,14 +39,13 @@ type Registry struct {
 }
 
 type Secret struct {
-	Name       string
-	Value      string
-	Match      []string
-	PluginOnly bool
+	Name           string
+	Value          string
+	AllowedPlugins []string
 }
 
 func (s *Secret) Available(container *yaml_types.Container) bool {
-	return (len(s.Match) == 0 || utils.MatchImage(container.Image, s.Match...)) && (!s.PluginOnly || container.IsPlugin())
+	return (len(s.AllowedPlugins) == 0 || utils.MatchImage(container.Image, s.AllowedPlugins...)) && (len(s.AllowedPlugins) == 0 || container.IsPlugin())
 }
 
 type secretMap map[string]Secret
@@ -132,7 +129,6 @@ func (c *Compiler) Compile(conf *yaml_types.Workflow) (*backend_types.Config, er
 		config.Secrets = append(config.Secrets, &backend_types.Secret{
 			Name:  sec.Name,
 			Value: sec.Value,
-			Mask:  true,
 		})
 	}
 
@@ -152,7 +148,7 @@ func (c *Compiler) Compile(conf *yaml_types.Workflow) (*backend_types.Config, er
 
 	// add default clone step
 	if !c.local && len(conf.Clone.ContainerList) == 0 && !conf.SkipClone {
-		cloneSettings := map[string]interface{}{"depth": "0"}
+		cloneSettings := map[string]any{"depth": "0"}
 		if c.metadata.Curr.Event == metadata.EventTag {
 			cloneSettings["tags"] = "true"
 		}
@@ -162,17 +158,17 @@ func (c *Compiler) Compile(conf *yaml_types.Workflow) (*backend_types.Config, er
 			Settings:    cloneSettings,
 			Environment: c.cloneEnv,
 		}
-		name := fmt.Sprintf("%s_clone", c.prefix)
-		step := c.createProcess(name, container, backend_types.StepTypeClone)
+		step, err := c.createProcess(container, backend_types.StepTypeClone)
+		if err != nil {
+			return nil, err
+		}
 
 		stage := new(backend_types.Stage)
-		stage.Name = name
-		stage.Alias = defaultCloneName
 		stage.Steps = append(stage.Steps, step)
 
 		config.Stages = append(config.Stages, stage)
 	} else if !c.local && !conf.SkipClone {
-		for i, container := range conf.Clone.ContainerList {
+		for _, container := range conf.Clone.ContainerList {
 			if match, err := container.When.Match(c.metadata, false, c.env); !match && err == nil {
 				continue
 			} else if err != nil {
@@ -180,11 +176,11 @@ func (c *Compiler) Compile(conf *yaml_types.Workflow) (*backend_types.Config, er
 			}
 
 			stage := new(backend_types.Stage)
-			stage.Name = fmt.Sprintf("%s_clone_%v", c.prefix, i)
-			stage.Alias = container.Name
 
-			name := fmt.Sprintf("%s_clone_%d", c.prefix, i)
-			step := c.createProcess(name, container, backend_types.StepTypeClone)
+			step, err := c.createProcess(container, backend_types.StepTypeClone)
+			if err != nil {
+				return nil, err
+			}
 
 			// only inject netrc if it's a trusted repo or a trusted plugin
 			if !c.netrcOnlyTrusted || c.trustedPipeline || (container.IsPlugin() && container.IsTrustedCloneImage()) {
@@ -199,32 +195,35 @@ func (c *Compiler) Compile(conf *yaml_types.Workflow) (*backend_types.Config, er
 		}
 	}
 
-	c.setupCache(conf, config)
+	err := c.setupCache(conf, config)
+	if err != nil {
+		return nil, err
+	}
 
 	// add services steps
 	if len(conf.Services.ContainerList) != 0 {
 		stage := new(backend_types.Stage)
-		stage.Name = fmt.Sprintf("%s_%s", c.prefix, nameServices)
-		stage.Alias = nameServices
 
-		for i, container := range conf.Services.ContainerList {
+		for _, container := range conf.Services.ContainerList {
 			if match, err := container.When.Match(c.metadata, false, c.env); !match && err == nil {
 				continue
 			} else if err != nil {
 				return nil, err
 			}
 
-			name := fmt.Sprintf("%s_%s_%d", c.prefix, nameServices, i)
-			step := c.createProcess(name, container, backend_types.StepTypeService)
+			step, err := c.createProcess(container, backend_types.StepTypeService)
+			if err != nil {
+				return nil, err
+			}
+
 			stage.Steps = append(stage.Steps, step)
 		}
 		config.Stages = append(config.Stages, stage)
 	}
 
-	// add pipeline steps. 1 pipeline step per stage, at the moment
-	var stage *backend_types.Stage
-	var group string
-	for i, container := range conf.Steps.ContainerList {
+	// add pipeline steps
+	steps := make([]*dagCompilerStep, 0, len(conf.Steps.ContainerList))
+	for pos, container := range conf.Steps.ContainerList {
 		// Skip if local and should not run local
 		if c.local && !container.When.IsLocal() {
 			continue
@@ -236,21 +235,14 @@ func (c *Compiler) Compile(conf *yaml_types.Workflow) (*backend_types.Config, er
 			return nil, err
 		}
 
-		if stage == nil || group != container.Group || container.Group == "" {
-			group = container.Group
-
-			stage = new(backend_types.Stage)
-			stage.Name = fmt.Sprintf("%s_stage_%v", c.prefix, i)
-			stage.Alias = container.Name
-			config.Stages = append(config.Stages, stage)
-		}
-
-		name := fmt.Sprintf("%s_step_%d", c.prefix, i)
 		stepType := backend_types.StepTypeCommands
 		if container.IsPlugin() {
 			stepType = backend_types.StepTypePlugin
 		}
-		step := c.createProcess(name, container, stepType)
+		step, err := c.createProcess(container, stepType)
+		if err != nil {
+			return nil, err
+		}
 
 		// inject netrc if it's a trusted repo or a trusted clone-plugin
 		if c.trustedPipeline || (container.IsPlugin() && container.IsTrustedCloneImage()) {
@@ -259,44 +251,65 @@ func (c *Compiler) Compile(conf *yaml_types.Workflow) (*backend_types.Config, er
 			}
 		}
 
-		stage.Steps = append(stage.Steps, step)
+		steps = append(steps, &dagCompilerStep{
+			step:      step,
+			position:  pos,
+			name:      container.Name,
+			group:     container.Group,
+			dependsOn: container.DependsOn,
+		})
 	}
 
-	c.setupCacheRebuild(conf, config)
+	// generate stages out of steps
+	stepStages, err := newDAGCompiler(steps).compile()
+	if err != nil {
+		return nil, err
+	}
+
+	config.Stages = append(config.Stages, stepStages...)
+
+	err = c.setupCacheRebuild(conf, config)
+	if err != nil {
+		return nil, err
+	}
 
 	return config, nil
 }
 
-func (c *Compiler) setupCache(conf *yaml_types.Workflow, ir *backend_types.Config) {
+func (c *Compiler) setupCache(conf *yaml_types.Workflow, ir *backend_types.Config) error {
 	if c.local || len(conf.Cache) == 0 || c.cacher == nil {
-		return
+		return nil
 	}
 
 	container := c.cacher.Restore(path.Join(c.metadata.Repo.Owner, c.metadata.Repo.Name), c.metadata.Curr.Commit.Branch, conf.Cache)
-	name := fmt.Sprintf("%s_restore_cache", c.prefix)
-	step := c.createProcess(name, container, backend_types.StepTypeCache)
+	step, err := c.createProcess(container, backend_types.StepTypeCache)
+	if err != nil {
+		return err
+	}
 
 	stage := new(backend_types.Stage)
-	stage.Name = name
-	stage.Alias = "restore_cache"
 	stage.Steps = append(stage.Steps, step)
 
 	ir.Stages = append(ir.Stages, stage)
+
+	return nil
 }
 
-func (c *Compiler) setupCacheRebuild(conf *yaml_types.Workflow, ir *backend_types.Config) {
+func (c *Compiler) setupCacheRebuild(conf *yaml_types.Workflow, ir *backend_types.Config) error {
 	if c.local || len(conf.Cache) == 0 || c.metadata.Curr.Event != metadata.EventPush || c.cacher == nil {
-		return
+		return nil
 	}
 	container := c.cacher.Rebuild(path.Join(c.metadata.Repo.Owner, c.metadata.Repo.Name), c.metadata.Curr.Commit.Branch, conf.Cache)
 
-	name := fmt.Sprintf("%s_rebuild_cache", c.prefix)
-	step := c.createProcess(name, container, backend_types.StepTypeCache)
+	step, err := c.createProcess(container, backend_types.StepTypeCache)
+	if err != nil {
+		return err
+	}
 
 	stage := new(backend_types.Stage)
-	stage.Name = name
-	stage.Alias = "rebuild_cache"
 	stage.Steps = append(stage.Steps, step)
 
 	ir.Stages = append(ir.Stages, stage)
+
+	return nil
 }

@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -38,26 +37,24 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
-	"github.com/woodpecker-ci/woodpecker/agent"
-	agentRpc "github.com/woodpecker-ci/woodpecker/agent/rpc"
-	"github.com/woodpecker-ci/woodpecker/cmd/common"
-	"github.com/woodpecker-ci/woodpecker/pipeline/backend"
-	"github.com/woodpecker-ci/woodpecker/pipeline/backend/types"
-	"github.com/woodpecker-ci/woodpecker/pipeline/rpc"
-	"github.com/woodpecker-ci/woodpecker/shared/utils"
-	"github.com/woodpecker-ci/woodpecker/version"
+	"go.woodpecker-ci.org/woodpecker/v2/agent"
+	agentRpc "go.woodpecker-ci.org/woodpecker/v2/agent/rpc"
+	"go.woodpecker-ci.org/woodpecker/v2/pipeline/backend"
+	"go.woodpecker-ci.org/woodpecker/v2/pipeline/backend/types"
+	"go.woodpecker-ci.org/woodpecker/v2/pipeline/rpc"
+	"go.woodpecker-ci.org/woodpecker/v2/shared/addon"
+	addonTypes "go.woodpecker-ci.org/woodpecker/v2/shared/addon/types"
+	"go.woodpecker-ci.org/woodpecker/v2/shared/logger"
+	"go.woodpecker-ci.org/woodpecker/v2/shared/utils"
+	"go.woodpecker-ci.org/woodpecker/v2/version"
 )
 
 func run(c *cli.Context) error {
-	common.SetupGlobalLogger(c)
-
 	agentConfigPath := c.String("agent-config")
 	hostname := c.String("hostname")
 	if len(hostname) == 0 {
 		hostname, _ = os.Hostname()
 	}
-
-	platform := runtime.GOOS + "/" + runtime.GOARCH
 
 	counter.Polling = c.Int("max-workflows")
 	counter.Running = 0
@@ -65,7 +62,7 @@ func run(c *cli.Context) error {
 	if c.Bool("healthcheck") {
 		go func() {
 			if err := http.ListenAndServe(c.String("healthcheck-addr"), nil); err != nil {
-				log.Error().Msgf("cannot listen on address %s: %v", c.String("healthcheck-addr"), err)
+				log.Error().Err(err).Msgf("cannot listen on address %s", c.String("healthcheck-addr"))
 			}
 		}()
 	}
@@ -121,9 +118,20 @@ func run(c *cli.Context) error {
 		context.Background(),
 		metadata.Pairs("hostname", hostname),
 	)
+
+	agentConfigPersisted := abool.New()
 	ctx = utils.WithContextSigtermCallback(ctx, func() {
-		println("ctrl+c received, terminating process")
+		log.Info().Msg("termination signal is received, shutting down")
 		sigterm.Set()
+
+		// Remove stateless agents from server
+		if agentConfigPersisted.IsNotSet() {
+			log.Debug().Msg("unregistering agent from server")
+			err := client.UnregisterAgent(ctx)
+			if err != nil {
+				log.Err(err).Msg("failed to unregister agent from server")
+			}
+		}
 	})
 
 	// check if grpc server version is compatible with agent
@@ -134,38 +142,52 @@ func run(c *cli.Context) error {
 	}
 	if grpcServerVersion.GrpcVersion != agentRpc.ClientGrpcVersion {
 		err := errors.New("GRPC version mismatch")
-		log.Error().Err(err).Msgf("Server version %s does report grpc version %d but we only understand %d",
+		log.Error().Err(err).Msgf("server version %s does report grpc version %d but we only understand %d",
 			grpcServerVersion.ServerVersion,
 			grpcServerVersion.GrpcVersion,
 			agentRpc.ClientGrpcVersion)
 		return err
 	}
 
-	backendCtx := context.WithValue(ctx, types.CliContext, c)
-	backend.Init(backendCtx)
-
 	var wg sync.WaitGroup
 	parallel := c.Int("max-workflows")
 	wg.Add(parallel)
 
 	// new engine
-	engine, err := backend.FindEngine(backendCtx, c.String("backend-engine"))
-	if err != nil {
-		log.Error().Err(err).Msgf("cannot find backend engine '%s'", c.String("backend-engine"))
-		return err
-	}
-
-	agentConfig.AgentID, err = client.RegisterAgent(ctx, platform, engine.Name(), version.String(), parallel)
+	backendCtx := context.WithValue(ctx, types.CliContext, c)
+	backendEngine, err := getBackendEngine(backendCtx, c.String("backend-engine"), c.StringSlice("addons"))
 	if err != nil {
 		return err
 	}
 
-	writeAgentConfig(agentConfig, agentConfigPath)
+	if !backendEngine.IsAvailable(backendCtx) {
+		log.Error().Str("engine", backendEngine.Name()).Msg("selected backend engine is unavailable")
+		return fmt.Errorf("selected backend engine %s is unavailable", backendEngine.Name())
+	}
+
+	// load engine (e.g. init api client)
+	engInfo, err := backendEngine.Load(backendCtx)
+	if err != nil {
+		log.Error().Err(err).Msg("cannot load backend engine")
+		return err
+	}
+	log.Debug().Msgf("loaded %s backend engine", backendEngine.Name())
+
+	agentConfig.AgentID, err = client.RegisterAgent(ctx, engInfo.Platform, backendEngine.Name(), version.String(), parallel)
+	if err != nil {
+		return err
+	}
+
+	if agentConfigPath != "" {
+		if err := writeAgentConfig(agentConfig, agentConfigPath); err == nil {
+			agentConfigPersisted.Set()
+		}
+	}
 
 	labels := map[string]string{
 		"hostname": hostname,
-		"platform": platform,
-		"backend":  engine.Name(),
+		"platform": engInfo.Platform,
+		"backend":  backendEngine.Name(),
 		"repo":     "*", // allow all repos by default
 	}
 
@@ -177,17 +199,18 @@ func run(c *cli.Context) error {
 		Labels: labels,
 	}
 
-	log.Debug().Msgf("Agent registered with ID %d", agentConfig.AgentID)
+	log.Debug().Msgf("agent registered with ID %d", agentConfig.AgentID)
 
 	go func() {
 		for {
 			if sigterm.IsSet() {
+				log.Debug().Msg("terminating health reporting")
 				return
 			}
 
 			err := client.ReportHealth(ctx)
 			if err != nil {
-				log.Err(err).Msgf("Failed to report health")
+				log.Err(err).Msg("failed to report health")
 				return
 			}
 
@@ -195,23 +218,17 @@ func run(c *cli.Context) error {
 		}
 	}()
 
-	// load engine (e.g. init api client)
-	if err := engine.Load(backendCtx); err != nil {
-		log.Error().Err(err).Msg("cannot load backend engine")
-		return err
-	}
-	log.Debug().Msgf("loaded %s backend engine", engine.Name())
-
 	for i := 0; i < parallel; i++ {
 		i := i
 		go func() {
 			defer wg.Done()
 
-			r := agent.NewRunner(client, filter, hostname, counter, &engine)
+			r := agent.NewRunner(client, filter, hostname, counter, &backendEngine)
 			log.Debug().Msgf("created new runner %d", i)
 
 			for {
 				if sigterm.IsSet() {
+					log.Debug().Msgf("terminating runner %d", i)
 					return
 				}
 
@@ -225,14 +242,39 @@ func run(c *cli.Context) error {
 	}
 
 	log.Info().Msgf(
-		"Starting Woodpecker agent with version '%s' and backend '%s' using platform '%s' running up to %d pipelines in parallel",
-		version.String(), engine.Name(), platform, parallel)
+		"starting Woodpecker agent with version '%s' and backend '%s' using platform '%s' running up to %d pipelines in parallel",
+		version.String(), backendEngine.Name(), engInfo.Platform, parallel)
 
 	wg.Wait()
 	return nil
 }
 
+func getBackendEngine(backendCtx context.Context, backendName string, addons []string) (types.Backend, error) {
+	addonBackend, err := addon.Load[types.Backend](addons, addonTypes.TypeBackend)
+	if err != nil {
+		log.Error().Err(err).Msg("cannot load backend addon")
+		return nil, err
+	}
+	if addonBackend != nil {
+		return addonBackend.Value, nil
+	}
+
+	backend.Init()
+	engine, err := backend.FindBackend(backendCtx, backendName)
+	if err != nil {
+		log.Error().Err(err).Msgf("cannot find backend engine '%s'", backendName)
+		return nil, err
+	}
+	return engine, nil
+}
+
 func runWithRetry(context *cli.Context) error {
+	if err := logger.SetupGlobalLogger(context, true); err != nil {
+		return err
+	}
+
+	initHealth()
+
 	retryCount := context.Int("connect-retry-count")
 	retryDelay := context.Duration("connect-retry-delay")
 	var err error

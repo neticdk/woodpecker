@@ -15,12 +15,14 @@
 package router
 
 import (
+	"net/http"
+
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog"
 
-	"github.com/woodpecker-ci/woodpecker/server/api"
-	"github.com/woodpecker-ci/woodpecker/server/api/debug"
-	"github.com/woodpecker-ci/woodpecker/server/router/middleware/session"
+	"go.woodpecker-ci.org/woodpecker/v2/server/api"
+	"go.woodpecker-ci.org/woodpecker/v2/server/api/debug"
+	"go.woodpecker-ci.org/woodpecker/v2/server/router/middleware/session"
 )
 
 func apiRoutes(e *gin.RouterGroup) {
@@ -73,6 +75,7 @@ func apiRoutes(e *gin.RouterGroup) {
 			repo.GET("/lookup/*repo_full_name", session.SetRepo(), session.SetPerm(), session.MustPull, api.LookupRepo)
 			repo.POST("", session.MustUser(), api.PostRepo)
 			repo.GET("", session.MustAdmin(), api.GetAllRepos)
+			repo.POST("/repair", session.MustAdmin(), api.RepairAllRepos)
 			repoBase := repo.Group("/:repo_id")
 			{
 				repoBase.Use(session.SetRepo())
@@ -224,12 +227,11 @@ func apiRoutes(e *gin.RouterGroup) {
 		}
 	}
 
-	// TODO: remove /hook in favor of /api/hook
-	e.POST("/hook", api.PostHook)
-
-	// TODO: move to /api/stream
-	sse := e.Group("/stream")
-	{
-		sse.GET("/events", api.EventStreamSSE)
-	}
+	// TODO: remove with 3.x
+	e.Any("/hook", func(c *gin.Context) {
+		c.String(http.StatusGone, "use /api/hook")
+	})
+	e.Any("/stream/events", func(c *gin.Context) {
+		c.String(http.StatusGone, "use /api/stream/events")
+	})
 }

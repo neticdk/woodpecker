@@ -1,7 +1,7 @@
 <template>
   <div v-if="pipeline" class="flex flex-col pt-10 md:pt-0">
     <div
-      class="flex flex-grow flex-col code-box shadow !p-0 !rounded-none md:m-4 md:mt-0 !md:rounded-md overflow-hidden"
+      class="flex flex-grow flex-col code-box shadow !p-0 !rounded-none md:mt-0 !md:rounded-md overflow-hidden"
       @mouseover="showActions = true"
       @mouseleave="showActions = false"
     >
@@ -101,6 +101,7 @@ import '~/style/console.css';
 
 import { useStorage } from '@vueuse/core';
 import { AnsiUp } from 'ansi_up';
+import { decode } from 'js-base64';
 import { debounce } from 'lodash';
 import { computed, inject, nextTick, onMounted, Ref, ref, toRef, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -158,7 +159,7 @@ const ansiUp = ref(new AnsiUp());
 ansiUp.value.use_classes = true;
 const logBuffer = ref<LogLine[]>([]);
 
-const maxLineCount = 500; // TODO: think about way to support lazy-loading more than last 300 logs (#776)
+const maxLineCount = 5000; // TODO(2653): set back to 500 and implement lazy-loading support
 
 function isSelected(line: LogLine): boolean {
   return route.hash === `#L${line.number}`;
@@ -176,17 +177,6 @@ function writeLog(line: Partial<LogLine>) {
     time: line.time ?? 0,
     type: null, // TODO: implement way to detect errors and warnings
   });
-}
-
-// SOURCE: https://stackoverflow.com/questions/30106476/using-javascripts-atob-to-decode-base64-doesnt-properly-decode-utf-8-strings
-function b64DecodeUnicode(str: string) {
-  return decodeURIComponent(
-    window
-      .atob(str)
-      .split('')
-      .map((c) => `%${`00${c.charCodeAt(0).toString(16)}`.slice(-2)}`)
-      .join(''),
-  );
 }
 
 function scrollDown() {
@@ -253,7 +243,7 @@ async function download() {
     downloadInProgress.value = false;
   }
   const fileURL = window.URL.createObjectURL(
-    new Blob([logs.map((line) => b64DecodeUnicode(line.data)).join('')], {
+    new Blob([logs.map((line) => decode(line.data)).join('')], {
       type: 'text/plain',
     }),
   );
@@ -275,7 +265,7 @@ async function loadLogs() {
   if (loadedStepSlug.value === stepSlug.value) {
     return;
   }
-  loadedStepSlug.value = stepSlug.value;
+
   log.value = undefined;
   logBuffer.value = [];
   ansiUp.value = new AnsiUp();
@@ -294,31 +284,35 @@ async function loadLogs() {
   }
 
   if (isStepFinished(step.value)) {
+    loadedStepSlug.value = stepSlug.value;
     const logs = await apiClient.getLogs(repo.value.id, pipeline.value.number, step.value.id);
-    logs?.forEach((line) => writeLog({ index: line.line, text: b64DecodeUnicode(line.data), time: line.time }));
+    logs?.forEach((line) => writeLog({ index: line.line, text: decode(line.data), time: line.time }));
     flushLogs(false);
-  }
-
-  if (isStepRunning(step.value)) {
+  } else if (isStepRunning(step.value)) {
+    loadedStepSlug.value = stepSlug.value;
     stream.value = apiClient.streamLogs(repo.value.id, pipeline.value.number, step.value.id, (line) => {
-      writeLog({ index: line.line, text: b64DecodeUnicode(line.data), time: line.time });
+      writeLog({ index: line.line, text: decode(line.data), time: line.time });
       flushLogs(true);
     });
   }
 }
 
 onMounted(async () => {
-  loadLogs();
+  await loadLogs();
 });
 
-watch(stepSlug, () => {
-  loadLogs();
+watch(stepSlug, async () => {
+  await loadLogs();
 });
 
-watch(step, (oldStep, newStep) => {
-  if (oldStep && oldStep.name === newStep?.name && oldStep?.end_time !== newStep?.end_time) {
-    if (autoScroll.value) {
+watch(step, async (newStep, oldStep) => {
+  if (oldStep?.name === newStep?.name) {
+    if (oldStep?.end_time !== newStep?.end_time && autoScroll.value) {
       scrollDown();
+    }
+
+    if (oldStep?.state !== newStep?.state) {
+      await loadLogs();
     }
   }
 });

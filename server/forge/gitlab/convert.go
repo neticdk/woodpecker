@@ -23,8 +23,8 @@ import (
 
 	"github.com/xanzy/go-gitlab"
 
-	"github.com/woodpecker-ci/woodpecker/server/model"
-	"github.com/woodpecker-ci/woodpecker/shared/utils"
+	"go.woodpecker-ci.org/woodpecker/v2/server/model"
+	"go.woodpecker-ci.org/woodpecker/v2/shared/utils"
 )
 
 const (
@@ -41,7 +41,7 @@ func (g *GitLab) convertGitLabRepo(_repo *gitlab.Project) (*model.Repo, error) {
 		Name:          name,
 		FullName:      _repo.PathWithNamespace,
 		Avatar:        _repo.AvatarURL,
-		Link:          _repo.WebURL,
+		ForgeURL:      _repo.WebURL,
 		Clone:         _repo.HTTPURLToRepo,
 		CloneSSH:      _repo.SSHURLToRepo,
 		Branch:        _repo.DefaultBranch,
@@ -52,6 +52,7 @@ func (g *GitLab) convertGitLabRepo(_repo *gitlab.Project) (*model.Repo, error) {
 			Push:  isWrite(_repo),
 			Admin: isAdmin(_repo),
 		},
+		PREnabled: _repo.MergeRequestsEnabled,
 	}
 
 	if len(repo.Avatar) != 0 && !strings.HasPrefix(repo.Avatar, "http") {
@@ -69,11 +70,12 @@ func convertMergeRequestHook(hook *gitlab.MergeEvent, req *http.Request) (int, *
 	source := hook.ObjectAttributes.Source
 	obj := hook.ObjectAttributes
 
-	if target == nil && source == nil {
+	switch {
+	case target == nil && source == nil:
 		return 0, nil, nil, fmt.Errorf("target and source keys expected in merge request hook")
-	} else if target == nil {
+	case target == nil:
 		return 0, nil, nil, fmt.Errorf("target key expected in merge request hook")
-	} else if source == nil {
+	case source == nil:
 		return 0, nil, nil, fmt.Errorf("source key expected in merge request hook")
 	}
 
@@ -90,7 +92,7 @@ func convertMergeRequestHook(hook *gitlab.MergeEvent, req *http.Request) (int, *
 	}
 
 	repo.ForgeRemoteID = model.ForgeRemoteID(fmt.Sprint(obj.TargetProjectID))
-	repo.Link = target.WebURL
+	repo.ForgeURL = target.WebURL
 
 	if target.GitHTTPURL != "" {
 		repo.Clone = target.GitHTTPURL
@@ -110,12 +112,14 @@ func convertMergeRequestHook(hook *gitlab.MergeEvent, req *http.Request) (int, *
 	}
 
 	pipeline.Event = model.EventPull
+	if obj.State == "closed" {
+		pipeline.Event = model.EventPullClosed
+	}
 
 	lastCommit := obj.LastCommit
 
 	pipeline.Message = lastCommit.Message
 	pipeline.Commit = lastCommit.ID
-	pipeline.CloneURL = obj.Source.HTTPURL
 
 	pipeline.Ref = fmt.Sprintf(mergeRefs, obj.IID)
 	pipeline.Branch = obj.SourceBranch
@@ -130,7 +134,7 @@ func convertMergeRequestHook(hook *gitlab.MergeEvent, req *http.Request) (int, *
 	}
 
 	pipeline.Title = obj.Title
-	pipeline.Link = obj.URL
+	pipeline.ForgeURL = obj.URL
 	pipeline.PullRequestLabels = convertLabels(hook.Labels)
 
 	return obj.IID, repo, pipeline, nil
@@ -147,7 +151,7 @@ func convertPushHook(hook *gitlab.PushEvent) (*model.Repo, *model.Pipeline, erro
 
 	repo.ForgeRemoteID = model.ForgeRemoteID(fmt.Sprint(hook.ProjectID))
 	repo.Avatar = hook.Project.AvatarURL
-	repo.Link = hook.Project.WebURL
+	repo.ForgeURL = hook.Project.WebURL
 	repo.Clone = hook.Project.GitHTTPURL
 	repo.CloneSSH = hook.Project.GitSSHURL
 	repo.FullName = hook.Project.PathWithNamespace
@@ -200,7 +204,7 @@ func convertTagHook(hook *gitlab.TagEvent) (*model.Repo, *model.Pipeline, error)
 
 	repo.ForgeRemoteID = model.ForgeRemoteID(fmt.Sprint(hook.ProjectID))
 	repo.Avatar = hook.Project.AvatarURL
-	repo.Link = hook.Project.WebURL
+	repo.ForgeURL = hook.Project.WebURL
 	repo.Clone = hook.Project.GitHTTPURL
 	repo.CloneSSH = hook.Project.GitSSHURL
 	repo.FullName = hook.Project.PathWithNamespace
@@ -251,7 +255,7 @@ func getUserAvatar(email string) string {
 func extractFromPath(str string) (string, string, error) {
 	s := strings.Split(str, "/")
 	if len(s) < 2 {
-		return "", "", fmt.Errorf("Minimum match not found")
+		return "", "", fmt.Errorf("minimum match not found")
 	}
 	return s[0], s[1], nil
 }

@@ -29,7 +29,7 @@ import (
 
 // Send makes an http request to the given endpoint, writing the input
 // to the request body and un-marshaling the output from the response body.
-func Send(ctx context.Context, method, path string, privateKey crypto.PrivateKey, in, out interface{}) (int, error) {
+func Send(ctx context.Context, method, path string, privateKey crypto.PrivateKey, in, out any) (int, error) {
 	uri, err := url.Parse(path)
 	if err != nil {
 		return 0, err
@@ -71,7 +71,7 @@ func Send(ctx context.Context, method, path string, privateKey crypto.PrivateKey
 			return resp.StatusCode, err
 		}
 
-		return resp.StatusCode, fmt.Errorf("Response: %s", string(body))
+		return resp.StatusCode, fmt.Errorf("response: %s", string(body))
 	}
 
 	// if no other errors parse and return the json response.

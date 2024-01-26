@@ -34,27 +34,28 @@ import (
 	"github.com/urfave/cli/v2"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/woodpecker-ci/woodpecker/server"
-	"github.com/woodpecker-ci/woodpecker/server/cache"
-	"github.com/woodpecker-ci/woodpecker/server/forge"
-	"github.com/woodpecker-ci/woodpecker/server/forge/bitbucket"
-	"github.com/woodpecker-ci/woodpecker/server/forge/bitbucketserver"
-	"github.com/woodpecker-ci/woodpecker/server/forge/gitea"
-	"github.com/woodpecker-ci/woodpecker/server/forge/github"
-	"github.com/woodpecker-ci/woodpecker/server/forge/gitlab"
-	"github.com/woodpecker-ci/woodpecker/server/model"
-	"github.com/woodpecker-ci/woodpecker/server/plugins/environments"
-	"github.com/woodpecker-ci/woodpecker/server/plugins/registry"
-	"github.com/woodpecker-ci/woodpecker/server/plugins/secrets"
-	"github.com/woodpecker-ci/woodpecker/server/queue"
-	"github.com/woodpecker-ci/woodpecker/server/store"
-	"github.com/woodpecker-ci/woodpecker/server/store/datastore"
-	"github.com/woodpecker-ci/woodpecker/server/store/types"
+	"go.woodpecker-ci.org/woodpecker/v2/server"
+	"go.woodpecker-ci.org/woodpecker/v2/server/cache"
+	"go.woodpecker-ci.org/woodpecker/v2/server/forge"
+	"go.woodpecker-ci.org/woodpecker/v2/server/forge/bitbucket"
+	"go.woodpecker-ci.org/woodpecker/v2/server/forge/bitbucketdatacenter"
+	"go.woodpecker-ci.org/woodpecker/v2/server/forge/gitea"
+	"go.woodpecker-ci.org/woodpecker/v2/server/forge/github"
+	"go.woodpecker-ci.org/woodpecker/v2/server/forge/gitlab"
+	"go.woodpecker-ci.org/woodpecker/v2/server/model"
+	"go.woodpecker-ci.org/woodpecker/v2/server/plugins/config"
+	"go.woodpecker-ci.org/woodpecker/v2/server/plugins/environments"
+	"go.woodpecker-ci.org/woodpecker/v2/server/plugins/registry"
+	"go.woodpecker-ci.org/woodpecker/v2/server/plugins/secrets"
+	"go.woodpecker-ci.org/woodpecker/v2/server/queue"
+	"go.woodpecker-ci.org/woodpecker/v2/server/store"
+	"go.woodpecker-ci.org/woodpecker/v2/server/store/datastore"
+	"go.woodpecker-ci.org/woodpecker/v2/server/store/types"
+	"go.woodpecker-ci.org/woodpecker/v2/shared/addon"
+	addonTypes "go.woodpecker-ci.org/woodpecker/v2/shared/addon/types"
 )
 
 func setupStore(c *cli.Context) (store.Store, error) {
-	// TODO: find a better way than global var to pass down to allow long migrations
-	server.Config.Server.Migrations.AllowLong = c.Bool("migrations-allow-long")
 	datasource := c.String("datasource")
 	driver := c.String("driver")
 	xorm := store.XORM{
@@ -64,19 +65,19 @@ func setupStore(c *cli.Context) (store.Store, error) {
 
 	if driver == "sqlite3" {
 		if datastore.SupportedDriver("sqlite3") {
-			log.Debug().Msgf("server has sqlite3 support")
+			log.Debug().Msg("server has sqlite3 support")
 		} else {
-			log.Debug().Msgf("server was built without sqlite3 support!")
+			log.Debug().Msg("server was built without sqlite3 support!")
 		}
 	}
 
 	if !datastore.SupportedDriver(driver) {
-		log.Fatal().Msgf("database driver '%s' not supported", driver)
+		return nil, fmt.Errorf("database driver '%s' not supported", driver)
 	}
 
 	if driver == "sqlite3" {
 		if err := checkSqliteFileExist(datasource); err != nil {
-			log.Fatal().Err(err).Msg("check sqlite file")
+			return nil, fmt.Errorf("check sqlite file: %w", err)
 		}
 	}
 
@@ -88,11 +89,11 @@ func setupStore(c *cli.Context) (store.Store, error) {
 	log.Trace().Msgf("setup datastore: %#v", *opts)
 	store, err := datastore.NewEngine(opts)
 	if err != nil {
-		log.Fatal().Err(err).Msg("could not open datastore")
+		return nil, fmt.Errorf("could not open datastore: %w", err)
 	}
 
-	if err := store.Migrate(); err != nil {
-		log.Fatal().Err(err).Msg("could not migrate datastore")
+	if err := store.Migrate(c.Bool("migrations-allow-long")); err != nil {
+		return nil, fmt.Errorf("could not migrate datastore: %w", err)
 	}
 
 	return store, nil
@@ -111,30 +112,62 @@ func setupQueue(c *cli.Context, s store.Store) queue.Queue {
 	return queue.WithTaskStore(queue.New(c.Context), s)
 }
 
-func setupSecretService(c *cli.Context, s model.SecretStore) model.SecretService {
-	return secrets.New(c.Context, s)
+func setupSecretService(c *cli.Context, s model.SecretStore) (model.SecretService, error) {
+	addonService, err := addon.Load[model.SecretService](c.StringSlice("addons"), addonTypes.TypeSecretService)
+	if err != nil {
+		return nil, err
+	}
+	if addonService != nil {
+		return addonService.Value, nil
+	}
+
+	return secrets.New(c.Context, s), nil
 }
 
-func setupRegistryService(c *cli.Context, s store.Store) model.RegistryService {
+func setupRegistryService(c *cli.Context, s store.Store) (model.RegistryService, error) {
+	addonService, err := addon.Load[model.RegistryService](c.StringSlice("addons"), addonTypes.TypeRegistryService)
+	if err != nil {
+		return nil, err
+	}
+	if addonService != nil {
+		return addonService.Value, nil
+	}
+
 	if c.String("docker-config") != "" {
 		return registry.Combined(
 			registry.New(s),
 			registry.Filesystem(c.String("docker-config")),
-		)
+		), nil
 	}
-	return registry.New(s)
+	return registry.New(s), nil
 }
 
-func setupEnvironService(c *cli.Context, _ store.Store) model.EnvironService {
-	return environments.Parse(c.StringSlice("environment"))
+func setupEnvironService(c *cli.Context, _ store.Store) (model.EnvironService, error) {
+	addonService, err := addon.Load[model.EnvironService](c.StringSlice("addons"), addonTypes.TypeEnvironmentService)
+	if err != nil {
+		return nil, err
+	}
+	if addonService != nil {
+		return addonService.Value, nil
+	}
+
+	return environments.Parse(c.StringSlice("environment")), nil
 }
 
 func setupMembershipService(_ *cli.Context, r forge.Forge) cache.MembershipService {
 	return cache.NewMembershipService(r)
 }
 
-// setupForge helper function to setup the forge from the CLI arguments.
+// setupForge helper function to set up the forge from the CLI arguments.
 func setupForge(c *cli.Context) (forge.Forge, error) {
+	addonForge, err := addon.Load[forge.Forge](c.StringSlice("addons"), addonTypes.TypeForge)
+	if err != nil {
+		return nil, err
+	}
+	if addonForge != nil {
+		return addonForge.Value, nil
+	}
+
 	switch {
 	case c.Bool("github"):
 		return setupGitHub(c)
@@ -157,7 +190,7 @@ func setupBitbucket(c *cli.Context) (forge.Forge, error) {
 		Client: c.String("bitbucket-client"),
 		Secret: c.String("bitbucket-secret"),
 	}
-	log.Trace().Msgf("Forge (bitbucket) opts: %#v", opts)
+	log.Trace().Msgf("forge (bitbucket) opts: %#v", opts)
 	return bitbucket.New(opts)
 }
 
@@ -174,15 +207,15 @@ func setupGitea(c *cli.Context) (forge.Forge, error) {
 		SkipVerify: c.Bool("gitea-skip-verify"),
 	}
 	if len(opts.URL) == 0 {
-		log.Fatal().Msg("WOODPECKER_GITEA_URL must be set")
+		return nil, fmt.Errorf("WOODPECKER_GITEA_URL must be set")
 	}
-	log.Trace().Msgf("Forge (gitea) opts: %#v", opts)
+	log.Trace().Msgf("forge (gitea) opts: %#v", opts)
 	return gitea.New(opts)
 }
 
 // setupBitbucketDatacenter helper function to setup the Bitbucket DataCenter/Server forge from the CLI arguments.
 func setupBitbucketDatacenter(c *cli.Context) (forge.Forge, error) {
-	opts := bitbucketserver.Opts{
+	opts := bitbucketdatacenter.Opts{
 		URL:               c.String("bitbucket-dc-server"),
 		Username:          c.String("bitbucket-dc-git-username"),
 		Password:          c.String("bitbucket-dc-git-password"),
@@ -191,8 +224,8 @@ func setupBitbucketDatacenter(c *cli.Context) (forge.Forge, error) {
 		ConsumerRSAString: c.String("bitbucket-dc-consumer-rsa-string"),
 		SkipVerify:        c.Bool("bitbucket-dc-skip-verify"),
 	}
-	log.Trace().Msgf("Forge (bitbucketserver) opts: %#v", opts)
-	return bitbucketserver.New(opts)
+	log.Trace().Msgf("Forge (bitbucketdatacenter) opts: %#v", opts)
+	return bitbucketdatacenter.New(opts)
 }
 
 // setupGitLab helper function to setup the GitLab forge from the CLI arguments.
@@ -214,7 +247,7 @@ func setupGitHub(c *cli.Context) (forge.Forge, error) {
 		SkipVerify: c.Bool("github-skip-verify"),
 		MergeRef:   c.Bool("github-merge-ref"),
 	}
-	log.Trace().Msgf("Forge (github) opts: %#v", opts)
+	log.Trace().Msgf("forge (github) opts: %#v", opts)
 	return github.New(opts)
 }
 
@@ -279,33 +312,44 @@ func setupMetrics(g *errgroup.Group, _store store.Store) {
 }
 
 // setupSignatureKeys generate or load key pair to sign webhooks requests (i.e. used for extensions)
-func setupSignatureKeys(_store store.Store) (crypto.PrivateKey, crypto.PublicKey) {
+func setupSignatureKeys(_store store.Store) (crypto.PrivateKey, crypto.PublicKey, error) {
 	privKeyID := "signature-private-key"
 
 	privKey, err := _store.ServerConfigGet(privKeyID)
 	if errors.Is(err, types.RecordNotExist) {
 		_, privKey, err := ed25519.GenerateKey(rand.Reader)
 		if err != nil {
-			log.Fatal().Err(err).Msgf("Failed to generate private key")
-			return nil, nil
+			return nil, nil, fmt.Errorf("failed to generate private key: %w", err)
 		}
 		err = _store.ServerConfigSet(privKeyID, hex.EncodeToString(privKey))
 		if err != nil {
-			log.Fatal().Err(err).Msgf("Failed to generate private key")
-			return nil, nil
+			return nil, nil, fmt.Errorf("failed to store private key: %w", err)
 		}
-		log.Debug().Msg("Created private key")
-		return privKey, privKey.Public()
+		log.Debug().Msg("created private key")
+		return privKey, privKey.Public(), nil
 	} else if err != nil {
-		log.Fatal().Err(err).Msgf("Failed to load private key")
-		return nil, nil
-	} else {
-		privKeyStr, err := hex.DecodeString(privKey)
-		if err != nil {
-			log.Fatal().Err(err).Msgf("Failed to decode private key")
-			return nil, nil
-		}
-		privKey := ed25519.PrivateKey(privKeyStr)
-		return privKey, privKey.Public()
+		return nil, nil, fmt.Errorf("failed to load private key: %w", err)
 	}
+	privKeyStr, err := hex.DecodeString(privKey)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to decode private key: %w", err)
+	}
+	privateKey := ed25519.PrivateKey(privKeyStr)
+	return privateKey, privateKey.Public(), nil
+}
+
+func setupConfigService(c *cli.Context) (config.Extension, error) {
+	addonExt, err := addon.Load[config.Extension](c.StringSlice("addons"), addonTypes.TypeConfigService)
+	if err != nil {
+		return nil, err
+	}
+	if addonExt != nil {
+		return addonExt.Value, nil
+	}
+
+	if endpoint := c.String("config-service-endpoint"); endpoint != "" {
+		return config.NewHTTP(endpoint, server.Config.Services.SignaturePrivateKey), nil
+	}
+
+	return nil, nil
 }

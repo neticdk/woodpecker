@@ -15,19 +15,18 @@
 package main
 
 import (
-	"fmt"
 	"os"
 
 	_ "github.com/joho/godotenv/autoload"
+	"github.com/rs/zerolog/log"
 	"github.com/urfave/cli/v2"
 
-	"github.com/woodpecker-ci/woodpecker/cmd/common"
-	"github.com/woodpecker-ci/woodpecker/pipeline/backend/docker"
-	"github.com/woodpecker-ci/woodpecker/pipeline/backend/kubernetes"
-	"github.com/woodpecker-ci/woodpecker/pipeline/backend/local"
-	"github.com/woodpecker-ci/woodpecker/pipeline/backend/ssh"
-	"github.com/woodpecker-ci/woodpecker/shared/utils"
-	"github.com/woodpecker-ci/woodpecker/version"
+	"go.woodpecker-ci.org/woodpecker/v2/pipeline/backend/docker"
+	"go.woodpecker-ci.org/woodpecker/v2/pipeline/backend/kubernetes"
+	"go.woodpecker-ci.org/woodpecker/v2/pipeline/backend/local"
+	"go.woodpecker-ci.org/woodpecker/v2/shared/logger"
+	"go.woodpecker-ci.org/woodpecker/v2/shared/utils"
+	"go.woodpecker-ci.org/woodpecker/v2/version"
 )
 
 func main() {
@@ -43,10 +42,9 @@ func main() {
 			Action: pinger,
 		},
 	}
-	app.Flags = utils.MergeSlices(flags, common.GlobalLoggerFlags, docker.Flags, ssh.Flags, kubernetes.Flags, local.Flags)
+	app.Flags = utils.MergeSlices(flags, logger.GlobalLoggerFlags, docker.Flags, kubernetes.Flags, local.Flags)
 
 	if err := app.Run(os.Args); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		log.Fatal().Err(err).Msg("error running agent") //nolint:forbidigo
 	}
 }

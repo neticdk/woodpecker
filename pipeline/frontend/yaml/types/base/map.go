@@ -24,8 +24,8 @@ import (
 type SliceOrMap map[string]string
 
 // UnmarshalYAML implements the Unmarshaler interface.
-func (s *SliceOrMap) UnmarshalYAML(unmarshal func(interface{}) error) error {
-	var sliceType []interface{}
+func (s *SliceOrMap) UnmarshalYAML(unmarshal func(any) error) error {
+	var sliceType []any
 	if err := unmarshal(&sliceType); err == nil {
 		parts := map[string]string{}
 		for _, s := range sliceType {
@@ -40,14 +40,14 @@ func (s *SliceOrMap) UnmarshalYAML(unmarshal func(interface{}) error) error {
 				}
 				parts[key] = val
 			} else {
-				return fmt.Errorf("Cannot unmarshal '%v' of type %T into a string value", s, s)
+				return fmt.Errorf("cannot unmarshal '%v' of type %T into a string value", s, s)
 			}
 		}
 		*s = parts
 		return nil
 	}
 
-	var mapType map[interface{}]interface{}
+	var mapType map[any]any
 	if err := unmarshal(&mapType); err == nil {
 		parts := map[string]string{}
 		for k, v := range mapType {
@@ -55,15 +55,15 @@ func (s *SliceOrMap) UnmarshalYAML(unmarshal func(interface{}) error) error {
 				if sv, ok := v.(string); ok {
 					parts[sk] = sv
 				} else {
-					return fmt.Errorf("Cannot unmarshal '%v' of type %T into a string value", v, v)
+					return fmt.Errorf("cannot unmarshal '%v' of type %T into a string value", v, v)
 				}
 			} else {
-				return fmt.Errorf("Cannot unmarshal '%v' of type %T into a string value", k, k)
+				return fmt.Errorf("cannot unmarshal '%v' of type %T into a string value", k, k)
 			}
 		}
 		*s = parts
 		return nil
 	}
 
-	return errors.New("Failed to unmarshal SliceOrMap")
+	return errors.New("failed to unmarshal SliceOrMap")
 }

@@ -25,9 +25,9 @@ func (e ErrNotFound) Error() string {
 }
 
 func (e ErrNotFound) Is(target error) bool {
-	_, ok := target.(ErrNotFound) //nolint:errorlint
+	_, ok := target.(ErrNotFound)
 	if !ok {
-		_, ok = target.(*ErrNotFound) //nolint:errorlint
+		_, ok = target.(*ErrNotFound)
 	}
 	return ok
 }
@@ -40,7 +40,12 @@ func (e ErrBadRequest) Error() string {
 	return e.Msg
 }
 
-var (
-	ErrFilteredRestrictions = errors.New("ignoring hook: branch does not match restrictions defined in yaml")
-	ErrFilteredSteps        = errors.New("ignoring hook: step conditions yield zero runnable steps")
-)
+func (e ErrBadRequest) Is(target error) bool {
+	_, ok := target.(ErrBadRequest)
+	if !ok {
+		_, ok = target.(*ErrBadRequest)
+	}
+	return ok
+}
+
+var ErrFiltered = errors.New("ignoring hook: 'when' filters filtered out all steps")

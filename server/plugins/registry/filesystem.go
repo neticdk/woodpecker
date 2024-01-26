@@ -24,7 +24,7 @@ import (
 	"github.com/docker/cli/cli/config/configfile"
 	"github.com/docker/cli/cli/config/types"
 
-	"github.com/woodpecker-ci/woodpecker/server/model"
+	"go.woodpecker-ci.org/woodpecker/v2/server/model"
 )
 
 type filesystem struct {
@@ -111,11 +111,11 @@ func decodeAuth(authStr string) (string, string, error) {
 		return "", "", err
 	}
 	if n > decLen {
-		return "", "", fmt.Errorf("Something went wrong decoding auth config")
+		return "", "", fmt.Errorf("something went wrong decoding auth config")
 	}
 	arr := strings.SplitN(string(decoded), ":", 2)
 	if len(arr) != 2 {
-		return "", "", fmt.Errorf("Invalid auth configuration file")
+		return "", "", fmt.Errorf("invalid auth configuration file")
 	}
 	password := strings.Trim(arr[1], "\x00")
 	return arr[0], password, nil

@@ -25,7 +25,7 @@ import (
 	"github.com/google/tink/go/keyset"
 	"github.com/rs/zerolog/log"
 
-	"github.com/woodpecker-ci/woodpecker/server/store/types"
+	"go.woodpecker-ci.org/woodpecker/v2/server/store/types"
 )
 
 func (svc *tinkEncryptionService) loadKeyset() error {
@@ -37,7 +37,7 @@ func (svc *tinkEncryptionService) loadKeyset() error {
 	defer func(file *os.File) {
 		err = file.Close()
 		if err != nil {
-			log.Err(err).Msgf(logTemplateTinkFailedClosingKeysetFile, svc.keysetFilePath)
+			log.Error().Err(err).Msgf(logTemplateTinkFailedClosingKeysetFile, svc.keysetFilePath)
 		}
 	}(file)
 

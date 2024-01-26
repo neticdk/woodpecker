@@ -24,6 +24,7 @@ type KubernetesBackendOptions struct {
 	ServiceAccountName string            `yaml:"serviceAccountName,omitempty"`
 	NodeSelector       map[string]string `yaml:"nodeSelector,omitempty"`
 	Tolerations        []Toleration      `yaml:"tolerations,omitempty"`
+	SecurityContext    *SecurityContext  `yaml:"securityContext,omitempty"`
 }
 
 type Resources struct {
@@ -53,3 +54,18 @@ const (
 	TolerationOpExists TolerationOperator = "Exists"
 	TolerationOpEqual  TolerationOperator = "Equal"
 )
+
+type SecurityContext struct {
+	Privileged      *bool       `yaml:"privileged,omitempty"`
+	RunAsNonRoot    *bool       `yaml:"runAsNonRoot,omitempty"`
+	RunAsUser       *int64      `yaml:"runAsUser,omitempty"`
+	RunAsGroup      *int64      `yaml:"runAsGroup,omitempty"`
+	FSGroup         *int64      `yaml:"fsGroup,omitempty"`
+	SeccompProfile  *SecProfile `yaml:"seccompProfile,omitempty"`
+	ApparmorProfile *SecProfile `yaml:"apparmorProfile,omitempty"`
+}
+
+type SecProfile struct {
+	Type             string `yaml:"type,omitempty"`
+	LocalhostProfile string `yaml:"localhostProfile,omitempty"`
+}

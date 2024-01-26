@@ -19,8 +19,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/woodpecker-ci/woodpecker/server/model"
-	"github.com/woodpecker-ci/woodpecker/server/store/types"
+	"go.woodpecker-ci.org/woodpecker/v2/server/model"
+	"go.woodpecker-ci.org/woodpecker/v2/server/store/types"
 )
 
 func TestGetRedirection(t *testing.T) {
@@ -31,10 +31,7 @@ func TestGetRedirection(t *testing.T) {
 		RepoID:   1,
 		FullName: "foo/bar",
 	}
-	if err := store.CreateRedirection(redirection); err != nil {
-		t.Errorf("Unexpected error: insert redirection: %s", err)
-		return
-	}
+	assert.NoError(t, store.CreateRedirection(redirection))
 	redirectionFromStore, err := store.GetRedirection("foo/bar")
 	assert.NoError(t, err)
 	assert.NotNil(t, redirectionFromStore)
@@ -62,24 +59,11 @@ func TestHasRedirectionForRepo(t *testing.T) {
 		RepoID:   1,
 		FullName: "foo/bar",
 	}
-	if err := store.CreateRedirection(redirection); err != nil {
-		t.Errorf("Unexpected error: insert redirection: %s", err)
-		return
-	}
+	assert.NoError(t, store.CreateRedirection(redirection))
 	has, err := store.HasRedirectionForRepo(1, "foo/bar")
-	if err != nil {
-		t.Error(err)
-		return
-	}
-	if !has {
-		t.Errorf("Expected a redirection for %s", redirection.FullName)
-	}
+	assert.NoError(t, err)
+	assert.True(t, has)
 	has, err = store.HasRedirectionForRepo(1, "foo/baz")
-	if err != nil {
-		t.Error(err)
-		return
-	}
-	if has {
-		t.Errorf("Expected not finding a redirection for %s", redirection.FullName)
-	}
+	assert.NoError(t, err)
+	assert.False(t, has)
 }

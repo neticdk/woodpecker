@@ -18,7 +18,7 @@ package store
 //go:generate mockery --name Store --output mocks --case underscore
 
 import (
-	"github.com/woodpecker-ci/woodpecker/server/model"
+	"go.woodpecker-ci.org/woodpecker/v2/server/model"
 )
 
 // TODO: CreateX func should return new object to not indirect let storage change an existing object (alter ID etc...)
@@ -93,6 +93,8 @@ type Store interface {
 	CreatePipeline(*model.Pipeline, ...*model.Step) error
 	// UpdatePipeline updates a pipeline.
 	UpdatePipeline(*model.Pipeline) error
+	// DeletePipeline deletes a pipeline.
+	DeletePipeline(*model.Pipeline) error
 
 	// Feeds
 	UserFeed(*model.User) ([]*model.Feed, error)
@@ -110,7 +112,7 @@ type Store interface {
 
 	// Configs
 	ConfigsForPipeline(pipelineID int64) ([]*model.Config, error)
-	ConfigFindIdentical(repoID int64, hash string) (*model.Config, error)
+	ConfigPersist(*model.Config) (*model.Config, error)
 	ConfigFindApproved(*model.Config) (bool, error)
 	ConfigCreate(*model.Config) error
 	PipelineConfigCreate(*model.PipelineConfig) error
@@ -141,7 +143,6 @@ type Store interface {
 	StepChild(*model.Pipeline, int, string) (*model.Step, error)
 	StepList(*model.Pipeline) ([]*model.Step, error)
 	StepUpdate(*model.Step) error
-	StepClear(*model.Pipeline) error
 	StepListFromWorkflowFind(*model.Workflow) ([]*model.Step, error)
 
 	// Logs
@@ -198,5 +199,5 @@ type Store interface {
 	// Store operations
 	Ping() error
 	Close() error
-	Migrate() error
+	Migrate(bool) error
 }

@@ -22,10 +22,10 @@ import (
 	"github.com/robfig/cron"
 	"github.com/rs/zerolog/log"
 
-	"github.com/woodpecker-ci/woodpecker/server/forge"
-	"github.com/woodpecker-ci/woodpecker/server/model"
-	"github.com/woodpecker-ci/woodpecker/server/pipeline"
-	"github.com/woodpecker-ci/woodpecker/server/store"
+	"go.woodpecker-ci.org/woodpecker/v2/server/forge"
+	"go.woodpecker-ci.org/woodpecker/v2/server/model"
+	"go.woodpecker-ci.org/woodpecker/v2/server/pipeline"
+	"go.woodpecker-ci.org/woodpecker/v2/server/store"
 )
 
 const (
@@ -45,7 +45,7 @@ func Start(ctx context.Context, store store.Store, forge forge.Forge) error {
 		case <-time.After(checkTime):
 			go func() {
 				now := time.Now()
-				log.Trace().Msg("Cron: fetch next crons")
+				log.Trace().Msg("cron: fetch next crons")
 
 				crons, err := store.CronListNextExecute(now.Unix(), checkItems)
 				if err != nil {
@@ -78,7 +78,7 @@ func CalcNewNext(schedule string, now time.Time) (time.Time, error) {
 }
 
 func runCron(store store.Store, forge forge.Forge, cron *model.Cron, now time.Time) error {
-	log.Trace().Msgf("Cron: run id[%d]", cron.ID)
+	log.Trace().Msgf("cron: run id[%d]", cron.ID)
 	ctx := context.Background()
 
 	newNext, err := CalcNewNext(cron.Schedule, now)
@@ -121,22 +121,10 @@ func CreatePipeline(ctx context.Context, store store.Store, f forge.Forge, cron 
 		return nil, nil, err
 	}
 
-	// if the forge has a refresh token, the current access token
+	// If the forge has a refresh token, the current access token
 	// may be stale. Therefore, we should refresh prior to dispatching
 	// the pipeline.
-	if refresher, ok := f.(forge.Refresher); ok {
-		refreshed, err := refresher.Refresh(ctx, creator)
-		if err != nil {
-			log.Error().Err(err).Msgf("failed to refresh oauth2 token for creator: %s", creator.Login)
-		} else if refreshed {
-			if err := store.UpdateUser(creator); err != nil {
-				log.Error().Err(err).Msgf("error while updating creator: %s", creator.Login)
-				// move forward
-			} else {
-				log.Debug().Msgf("token refreshed for creator: %s", creator.Login)
-			}
-		}
-	}
+	forge.Refresh(ctx, f, store, creator)
 
 	commit, err := f.BranchHead(ctx, creator, repo, cron.Branch)
 	if err != nil {
@@ -151,6 +139,6 @@ func CreatePipeline(ctx context.Context, store store.Store, f forge.Forge, cron 
 		Message:   cron.Name,
 		Timestamp: cron.NextExec,
 		Sender:    cron.Name,
-		Link:      repo.Link,
+		ForgeURL:  repo.ForgeURL,
 	}, nil
 }

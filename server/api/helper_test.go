@@ -6,8 +6,9 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/assert"
 
-	"github.com/woodpecker-ci/woodpecker/server/pipeline"
+	"go.woodpecker-ci.org/woodpecker/v2/server/pipeline"
 )
 
 func TestHandlePipelineError(t *testing.T) {
@@ -16,11 +17,7 @@ func TestHandlePipelineError(t *testing.T) {
 		code int
 	}{
 		{
-			err:  pipeline.ErrFilteredRestrictions,
-			code: http.StatusNoContent,
-		},
-		{
-			err:  pipeline.ErrFilteredSteps,
+			err:  pipeline.ErrFiltered,
 			code: http.StatusNoContent,
 		},
 		{
@@ -37,9 +34,7 @@ func TestHandlePipelineError(t *testing.T) {
 		r := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(r)
 		handlePipelineErr(c, tt.err)
-		if r.Code != tt.code {
-			t.Errorf("status code: %d - expected: %d", r.Code, tt.code)
-		}
+		c.Writer.WriteHeaderNow() // require written header
+		assert.Equal(t, tt.code, r.Code)
 	}
-
 }

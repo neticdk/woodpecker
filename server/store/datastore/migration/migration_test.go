@@ -19,14 +19,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"xorm.io/xorm"
-	"xorm.io/xorm/schemas"
-
 	// blank imports to register the sql drivers
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/lib/pq"
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/stretchr/testify/assert"
+	"xorm.io/xorm"
+	"xorm.io/xorm/schemas"
 )
 
 const (
@@ -94,14 +93,9 @@ func testDB(t *testing.T, new bool) (engine *xorm.Engine, closeDB func()) {
 }
 
 func TestMigrate(t *testing.T) {
-	// make all tasks required for tests
-	for _, task := range migrationTasks {
-		task.required = true
-	}
-
 	// init new db
 	engine, closeDB := testDB(t, true)
-	assert.NoError(t, Migrate(engine))
+	assert.NoError(t, Migrate(engine, true))
 	closeDB()
 
 	dbType := engine.Dialect().URI().DBType
@@ -112,6 +106,6 @@ func TestMigrate(t *testing.T) {
 
 	// migrate old db
 	engine, closeDB = testDB(t, false)
-	assert.NoError(t, Migrate(engine))
+	assert.NoError(t, Migrate(engine, true))
 	closeDB()
 }

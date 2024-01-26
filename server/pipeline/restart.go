@@ -18,15 +18,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/rs/zerolog/log"
 
-	"github.com/woodpecker-ci/woodpecker/pipeline/frontend/yaml"
-	"github.com/woodpecker-ci/woodpecker/server"
-	forge_types "github.com/woodpecker-ci/woodpecker/server/forge/types"
-	"github.com/woodpecker-ci/woodpecker/server/model"
-	"github.com/woodpecker-ci/woodpecker/server/store"
+	"go.woodpecker-ci.org/woodpecker/v2/server"
+	forge_types "go.woodpecker-ci.org/woodpecker/v2/server/forge/types"
+	"go.woodpecker-ci.org/woodpecker/v2/server/model"
+	"go.woodpecker-ci.org/woodpecker/v2/server/store"
 )
 
 // Restart a pipeline by creating a new one out of the old and start it
@@ -39,20 +37,19 @@ func Restart(ctx context.Context, store store.Store, lastPipeline *model.Pipelin
 
 	var pipelineFiles []*forge_types.FileMeta
 
-	// fetch the old pipeline config from database
+	// fetch the old pipeline config from the database
 	configs, err := store.ConfigsForPipeline(lastPipeline.ID)
 	if err != nil {
-		msg := fmt.Sprintf("failure to get pipeline config for %s. %s", repo.FullName, err)
-		log.Error().Msgf(msg)
-		return nil, &ErrNotFound{Msg: msg}
+		log.Error().Err(err).Msgf("failure to get pipeline config for %s", repo.FullName)
+		return nil, &ErrNotFound{Msg: fmt.Sprintf("failure to get pipeline config for %s. %s", repo.FullName, err)}
 	}
 
 	for _, y := range configs {
 		pipelineFiles = append(pipelineFiles, &forge_types.FileMeta{Data: y.Data, Name: y.Name})
 	}
 
-	// If config extension is active we should refetch the config in case something changed
-	if server.Config.Services.ConfigService != nil && server.Config.Services.ConfigService.IsConfigured() {
+	// If the config extension is active we should refetch the config in case something changed
+	if server.Config.Services.ConfigService != nil {
 		currentFileMeta := make([]*forge_types.FileMeta, len(configs))
 		for i, cfg := range configs {
 			currentFileMeta[i] = &forge_types.FileMeta{Name: cfg.Name, Data: cfg.Data}
@@ -88,7 +85,7 @@ func Restart(ctx context.Context, store store.Store, lastPipeline *model.Pipelin
 		}
 		return newPipeline, nil
 	}
-	if err := persistPipelineConfigs(store, configs, newPipeline.ID); err != nil {
+	if err := linkPipelineConfigs(store, configs, newPipeline.ID); err != nil {
 		msg := fmt.Sprintf("failure to persist pipeline config for %s.", repo.FullName)
 		log.Error().Err(err).Msg(msg)
 		return nil, fmt.Errorf(msg)
@@ -96,10 +93,7 @@ func Restart(ctx context.Context, store store.Store, lastPipeline *model.Pipelin
 
 	newPipeline, pipelineItems, err := createPipelineItems(ctx, store, newPipeline, user, repo, pipelineFiles, envs)
 	if err != nil {
-		if errors.Is(err, &yaml.PipelineParseError{}) {
-			return newPipeline, nil
-		}
-		msg := fmt.Sprintf("failure to createBuildItems for %s", repo.FullName)
+		msg := fmt.Sprintf("failure to createPipelineItems for %s", repo.FullName)
 		log.Error().Err(err).Msg(msg)
 		return nil, fmt.Errorf(msg)
 	}
@@ -114,8 +108,7 @@ func Restart(ctx context.Context, store store.Store, lastPipeline *model.Pipelin
 	return newPipeline, nil
 }
 
-// TODO: reuse at create.go too
-func persistPipelineConfigs(store store.Store, configs []*model.Config, pipelineID int64) error {
+func linkPipelineConfigs(store store.Store, configs []*model.Config, pipelineID int64) error {
 	for _, conf := range configs {
 		pipelineConfig := &model.PipelineConfig{
 			ConfigID:   conf.ID,
@@ -136,7 +129,6 @@ func createNewOutOfOld(old *model.Pipeline) *model.Pipeline {
 	newPipeline.Status = model.StatusPending
 	newPipeline.Started = 0
 	newPipeline.Finished = 0
-	newPipeline.Enqueued = time.Now().UTC().Unix()
-	newPipeline.Error = ""
+	newPipeline.Errors = nil
 	return &newPipeline
 }

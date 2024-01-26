@@ -18,9 +18,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/woodpecker-ci/woodpecker/pipeline/rpc/proto"
-
 	"google.golang.org/grpc"
+
+	"go.woodpecker-ci.org/woodpecker/v2/pipeline/rpc/proto"
 )
 
 type AuthClient struct {
