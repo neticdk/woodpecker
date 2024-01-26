@@ -35,10 +35,7 @@ require (
 	github.com/moby/moby v24.0.7+incompatible
 	github.com/moby/term v0.5.0
 	github.com/mrjones/oauth v0.0.0-20190623134757-126b35219450
-<<<<<<< HEAD
-=======
 	github.com/muesli/termenv v0.15.2
->>>>>>> feature/reintroduce-bitbucketserver
 	github.com/neticdk/go-bitbucket v1.0.0
 	github.com/oklog/ulid/v2 v2.1.0
 	github.com/pkg/errors v0.9.1
@@ -117,7 +114,6 @@ require (
 	github.com/imdario/mergo v0.3.16 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
-	github.com/julienschmidt/httprouter v1.3.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.6 // indirect
 	github.com/leodido/go-urn v1.2.4 // indirect
 	github.com/libdns/libdns v0.2.1 // indirect
