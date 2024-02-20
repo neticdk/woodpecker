@@ -313,6 +313,8 @@ func (c *client) Status(ctx context.Context, u *model.User, repo *model.Repo, pi
 		Key:         common.GetPipelineStatusContext(repo, pipeline, workflow),
 		Description: common.GetPipelineStatusDescription(pipeline.Status),
 	}
+	log.Info().Any("status", status).Msg("updating build status in Bitbucket...")
+
 	_, err = bc.Projects.CreateBuildStatus(ctx, repo.Owner, repo.Name, pipeline.Commit, status)
 	return err
 }
