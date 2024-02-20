@@ -581,9 +581,17 @@ func (c *client) OrgMembership(_ context.Context, _ *model.User, _ string) (*mod
 }
 
 // Org fetches the organization from the forge by name. If the name is a user an org with type user is returned.
-func (c *client) Org(_ context.Context, _ *model.User, _ string) (*model.Org, error) {
-	// TODO: Not implemented currently
-	return nil, nil
+func (c *client) Org(_ context.Context, _ *model.User, owner string) (*model.Org, error) {
+	if strings.HasPrefix(owner, "~") {
+		return &model.Org{
+			Name:   owner,
+			IsUser: true,
+		}, nil
+	}
+	return &model.Org{
+		Name:   owner,
+		IsUser: false,
+	}, nil
 }
 
 type httpLogger struct {
