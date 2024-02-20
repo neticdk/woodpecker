@@ -1,3 +1,7 @@
+---
+toc_max_heading_level: 2
+---
+
 # Bitbucket Datacenter / Server
 
 Woodpecker comes with experimental support for Bitbucket Datacenter / Server, formerly known as Atlassian Stash. To enable Bitbucket Server you should configure the Woodpecker container using the following environment variables:
