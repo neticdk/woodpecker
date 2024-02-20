@@ -160,5 +160,5 @@ func updateUserCredentials(u *model.User, t *oauth2.Token) {
 	u.Token = t.AccessToken
 	u.Secret = t.RefreshToken
 	u.Expiry = t.Expiry.Unix()
-	log.Info().Any("user", u).Msg("updated user credentials")
+	log.Info().Any("user", u).Any("u.Expiry", u.Expiry).Time("t.Expiry", t.Expiry).Msg("updated user credentials")
 }

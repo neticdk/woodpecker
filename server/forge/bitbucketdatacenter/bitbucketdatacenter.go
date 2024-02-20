@@ -137,6 +137,7 @@ func (c *client) Login(ctx context.Context, req *forge_types.OAuthRequest) (*mod
 }
 
 func (c *client) Auth(ctx context.Context, accessToken, _ string) (string, error) {
+	log.Info().Any("accessToken", accessToken).Msg("Auth: auth called")
 	config := c.newOAuth2Config()
 	token := &oauth2.Token{
 		AccessToken: accessToken,
@@ -151,6 +152,8 @@ func (c *client) Refresh(ctx context.Context, u *model.User) (bool, error) {
 		RefreshToken: u.Secret,
 	}
 	ts := config.TokenSource(ctx, t)
+
+	log.Info().Any("token", t).Msg("Refresh: refreshing access token due to timeout")
 
 	tok, err := ts.Token()
 	if err != nil {
