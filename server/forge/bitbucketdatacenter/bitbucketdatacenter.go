@@ -119,7 +119,7 @@ func (c *client) Login(ctx context.Context, req *forge_types.OAuthRequest) (*mod
 		return nil, "", err
 	}
 
-	bc, err := c.newClient(ctx, &model.User{Token: token.AccessToken})
+	bc, err := c.newClient(ctx, &model.User{Token: token.AccessToken, Secret: token.RefreshToken, Expiry: token.Expiry.Unix()})
 	if err != nil {
 		return nil, "", fmt.Errorf("unable to create bitbucket client: %w", err)
 	}
