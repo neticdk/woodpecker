@@ -21,7 +21,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
 	bb "github.com/neticdk/go-bitbucket/bitbucket"
 	"github.com/rs/zerolog/log"
@@ -161,7 +160,7 @@ func (c *client) Refresh(ctx context.Context, u *model.User) (bool, error) {
 	}
 
 	updateUserCredentials(u, tok)
-	log.Info().Any("user", u).Msg("updated user after refresh")
+	log.Info().Any("user", u).Any("user.Expiry", u.Expiry).Msg("updated user after refresh")
 
 	return true, nil
 }
@@ -620,9 +619,7 @@ func (c *client) newOAuth2Config() *oauth2.Config {
 func (c *client) newClient(ctx context.Context, u *model.User) (*bb.Client, error) {
 	config := c.newOAuth2Config()
 	t := &oauth2.Token{
-		AccessToken:  u.Token,
-		RefreshToken: u.Secret,
-		Expiry:       time.Unix(u.Expiry, 0),
+		AccessToken: u.Token,
 	}
 	client := config.Client(ctx, t)
 	return bb.NewClient(c.urlAPI, client)

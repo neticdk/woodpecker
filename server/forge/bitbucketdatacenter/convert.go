@@ -159,6 +159,6 @@ func convertListOptions(p *model.ListOptions) bb.ListOptions {
 func updateUserCredentials(u *model.User, t *oauth2.Token) {
 	u.Token = t.AccessToken
 	u.Secret = t.RefreshToken
-	u.Expiry = t.Expiry.Unix()
+	u.Expiry = t.Expiry.UTC().Unix()
 	log.Info().Any("user", u).Any("u.Expiry", u.Expiry).Time("t.Expiry", t.Expiry).Msg("updated user credentials")
 }
