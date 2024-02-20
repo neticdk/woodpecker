@@ -21,7 +21,6 @@ import (
 	"time"
 
 	bb "github.com/neticdk/go-bitbucket/bitbucket"
-	"github.com/rs/zerolog/log"
 	"golang.org/x/oauth2"
 
 	"go.woodpecker-ci.org/woodpecker/v2/server/model"
@@ -160,5 +159,4 @@ func updateUserCredentials(u *model.User, t *oauth2.Token) {
 	u.Token = t.AccessToken
 	u.Secret = t.RefreshToken
 	u.Expiry = t.Expiry.UTC().Unix()
-	log.Info().Any("user", u).Any("u.Expiry", u.Expiry).Time("t.Expiry", t.Expiry).Msg("updated user credentials")
 }

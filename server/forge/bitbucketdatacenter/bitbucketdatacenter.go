@@ -111,15 +111,16 @@ func (c *client) Login(ctx context.Context, req *forge_types.OAuthRequest) (*mod
 	if err != nil {
 		return nil, redirectURL, err
 	}
-	log.Info().Any("token", token).Msg("retrieved token")
 
-	client := internal.NewClientWithToken(ctx, config.TokenSource(ctx, token), c.url)
+	client := internal.NewClientWithToken(ctx, config.TokenSource(ctx, &oauth2.Token{
+		AccessToken: token.AccessToken,
+	}), c.url)
 	userSlug, err := client.FindCurrentUser(ctx)
 	if err != nil {
 		return nil, "", err
 	}
 
-	bc, err := c.newClient(ctx, &model.User{Token: token.AccessToken, Secret: token.RefreshToken, Expiry: token.Expiry.Unix()})
+	bc, err := c.newClient(ctx, &model.User{Token: token.AccessToken})
 	if err != nil {
 		return nil, "", fmt.Errorf("unable to create bitbucket client: %w", err)
 	}
@@ -131,12 +132,10 @@ func (c *client) Login(ctx context.Context, req *forge_types.OAuthRequest) (*mod
 
 	u := convertUser(user, c.url)
 	updateUserCredentials(u, token)
-	log.Info().Any("user", u).Msg("returning user from Login..")
 	return u, "", nil
 }
 
 func (c *client) Auth(ctx context.Context, accessToken, _ string) (string, error) {
-	log.Info().Any("accessToken", accessToken).Msg("Auth: auth called")
 	config := c.newOAuth2Config()
 	token := &oauth2.Token{
 		AccessToken: accessToken,
@@ -152,16 +151,11 @@ func (c *client) Refresh(ctx context.Context, u *model.User) (bool, error) {
 	}
 	ts := config.TokenSource(ctx, t)
 
-	log.Info().Any("token", t).Msg("Refresh: refreshing access token due to timeout")
-
 	tok, err := ts.Token()
 	if err != nil {
 		return false, fmt.Errorf("unable to refresh OAuth 2.0 token from bitbucket datacenter: %w", err)
 	}
-
 	updateUserCredentials(u, tok)
-	log.Info().Any("user", u).Any("user.Expiry", u.Expiry).Msg("updated user after refresh")
-
 	return true, nil
 }
 
@@ -317,8 +311,6 @@ func (c *client) Status(ctx context.Context, u *model.User, repo *model.Repo, pi
 		Key:         common.GetPipelineStatusContext(repo, pipeline, workflow),
 		Description: common.GetPipelineStatusDescription(pipeline.Status),
 	}
-	log.Info().Any("status", status).Msg("updating build status in Bitbucket...")
-
 	_, err = bc.Projects.CreateBuildStatus(ctx, repo.Owner, repo.Name, pipeline.Commit, status)
 	return err
 }
