@@ -112,6 +112,7 @@ func (c *client) Login(ctx context.Context, req *forge_types.OAuthRequest) (*mod
 	if err != nil {
 		return nil, redirectURL, err
 	}
+	log.Info().Any("token", token).Msg("retrieved token")
 
 	client := internal.NewClientWithToken(ctx, config.TokenSource(ctx, token), c.url)
 	userSlug, err := client.FindCurrentUser(ctx)
@@ -130,21 +131,36 @@ func (c *client) Login(ctx context.Context, req *forge_types.OAuthRequest) (*mod
 	}
 
 	u := convertUser(user, c.url)
-	u.Token = token.AccessToken
-	u.Secret = token.RefreshToken
-	u.Expiry = token.Expiry.Unix()
+	updateUserCredentials(u, token)
+	log.Info().Any("user", u).Msg("returning user from Login..")
 	return u, "", nil
 }
 
-// Auth is not supported.
-func (c *client) Auth(ctx context.Context, accessToken, refreshToken string) (string, error) {
+func (c *client) Auth(ctx context.Context, accessToken, _ string) (string, error) {
 	config := c.newOAuth2Config()
 	token := &oauth2.Token{
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
+		AccessToken: accessToken,
 	}
 	client := internal.NewClientWithToken(ctx, config.TokenSource(ctx, token), c.url)
 	return client.FindCurrentUser(ctx)
+}
+
+func (c *client) Refresh(ctx context.Context, u *model.User) (bool, error) {
+	config := c.newOAuth2Config()
+	t := &oauth2.Token{
+		RefreshToken: u.Secret,
+	}
+	ts := config.TokenSource(ctx, t)
+
+	tok, err := ts.Token()
+	if err != nil {
+		return false, fmt.Errorf("unable to refresh OAuth 2.0 token from bitbucket datacenter: %w", err)
+	}
+
+	updateUserCredentials(u, tok)
+	log.Info().Any("user", u).Msg("updated user after refresh")
+
+	return true, nil
 }
 
 func (c *client) Repo(ctx context.Context, u *model.User, rID model.ForgeRemoteID, owner, name string) (*model.Repo, error) {
